@@ -1001,16 +1001,25 @@ function punchFx(i, hit) {
 }
 
 // Kürek: sol/sağ tuşları nişan yönüne doğru tünel kazar. İlk kazışta 1 kürek hakkı harcanır, tur bitmez.
+// Kazılacak yönde toprak var mı: zaten patlamayla açılmış boşlukta kürek işlemez, asker havada ilerleyemez
+function soilAhead(cx, cy, dx, dy) {
+  const a0 = Math.atan2(dy, dx); let n = 0;
+  for (let k = -3; k <= 3; k++) { const a = a0 + k * 0.25; if (isSolid(cx + Math.cos(a) * (DIG_R + 2), cy + Math.sin(a) * (DIG_R + 2))) n++; }
+  return n >= 2;
+}
 function dig(dir) {
   const t = team(), si = WI('shovel');
-  if (!digging) { if (t.ammo[si] <= 0) return; t.ammo[si]--; digging = true; }
   if (digLeft <= 0) return;
+  if (!active.grounded && active.vy > 60) return;        // düşerken kazılmaz
   active.facing = dir;
   const dx = Math.cos(active.aim) * dir, dy = Math.sin(active.aim);
+  if (!soilAhead(active.x + dx * 10, active.y - UNIT_H / 2 + dy * 10, dx, dy)) { digAcc = 0; return; }
+  if (!digging) { if (t.ammo[si] <= 0) return; t.ammo[si]--; digging = true; }   // hak ancak gerçekten kazınca harcanır
   digAcc += 55 * DT;
   while (digAcc >= 1 && digLeft > 0) {
-    digAcc--; digLeft--;
     const cx = active.x + dx * 10, cy = active.y - UNIT_H / 2 + dy * 10;
+    if (!soilAhead(cx, cy, dx, dy)) { digAcc = 0; break; }
+    digAcc--; digLeft--;
     if (++digMark % 3 === 0) {
       carve(cx, cy, DIG_R);
       if (mode === 'host') carveLog.push([r1(cx), r1(cy), DIG_R]);
