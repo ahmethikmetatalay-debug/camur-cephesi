@@ -52,6 +52,9 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-
 .chip{background:var(--glass);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 
 .teams{display:grid;gap:5px;padding:7px 9px;min-width:0;width:132px}
+.thead{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.tside{font:12px/1 var(--font-display);letter-spacing:.03em;margin-top:2px}
+.tside ~ .trow{padding-left:8px}
 .trow{display:grid;gap:2px;font-size:11px;font-weight:600;line-height:1.1}
 .trow span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .trow.out{opacity:.35;text-decoration:line-through}
@@ -1697,9 +1700,22 @@ function updateFx(dt) {
 }
 
 // ---- HUD ----
+// Sol üst panel: en üstte oyun modu; takımlı modda oyuncular takım başlıkları altında gruplanır
 function buildTeamsPanel() {
   const panel = $('teamsPanel'); panel.textContent = '';
-  for (const t of teams) {
+  const tm = gameMode === 'team';
+  const head = document.createElement('div'); head.className = 'thead';
+  head.textContent = mode === 'local' ? 'Aynı telefon' : tm ? 'Takımlı' : 'Herkes tek';
+  panel.appendChild(head);
+  const order = tm ? [0, 1].flatMap(s => teams.filter(t => t.side === s)) : teams;
+  let lastSide = -1;
+  for (const t of order) {
+    if (tm && t.side !== lastSide) {
+      lastSide = t.side;
+      const sh = document.createElement('div'); sh.className = 'tside';
+      sh.textContent = SIDES[t.side].name; sh.style.color = SIDES[t.side].tones[0].c;
+      panel.appendChild(sh);
+    }
     const row = document.createElement('div'); row.className = 'trow';
     const name = document.createElement('span'); name.textContent = t.name; name.style.color = t.c;
     const bar = document.createElement('div'); bar.className = 'tbar';
