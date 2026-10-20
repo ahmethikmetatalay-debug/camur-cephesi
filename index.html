@@ -360,7 +360,7 @@ const PUNCH_DMG = 10, PUNCH_REACH = 34;
 const DIG_MAX = MOVE_MAX * 2, DIG_R = 18;           // kürek: yürüme hakkının 2 katı tünel
 const PORTAL_COLORS = ['#3ec5ff', '#ff9a3c'];
 const WORM_NAMES = ['Paşa', 'Kömür', 'Fındık', 'Tospik', 'Zeytin', 'Pamuk', 'Leblebi', 'Haydut', 'Sucuk', 'Pırasa', 'Boncuk', 'Lokum', 'Turşu', 'Kaju', 'Simit', 'Mantı'];
-const ID_PREFIX = 'camurcephesi-v6-';
+const ID_PREFIX = 'camurcephesi-v7-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 // Tohumlu rastgelelik: arazi tohumdan üretilir, böylece her telefon aynı haritayı kendisi çizer
@@ -603,7 +603,8 @@ function airStep(b, dt, onImpact) {
     else if (sy > 0) {
       const speed = b.vy;
       if (onImpact) onImpact(b, speed);
-      if (speed > 360) { b.vy = -speed * 0.3; b.vx *= 0.5; break; }
+      if (speed > 360 && !b.punched) { b.vy = -speed * 0.3; b.vx *= 0.5; break; }
+      b.punched = false;
       let k = 0;
       while (k < 3 && !isSolid(b.x, b.y + 1) && bodyFree(b.x, b.y + 1, b.h)) { b.y++; k++; }
       b.grounded = true; b.vx = 0; b.vy = 0; return;
@@ -863,11 +864,12 @@ function credit(u, dmg) {
   else atk.dmg += dmg;
 }
 
-// linked: link zincirinden gelen hasar (zinciri tekrar tetiklemez)
+// linked: link zincirinden gelen hasar (zinciri tekrar tetiklemez).
+// Kalkan hasarı yuttuysa true döner: çağıran taraf askeri fırlatmaz, asker taş gibi yerinde kalır.
 function hurt(u, dmg, linked) {
-  if (dmg <= 0 || !u.alive) return;
-  // Kalkan ilk hasarı tamamen yutar, mavi küre olarak görünüp kaybolur
-  if (u.shield) { u.shield = false; shieldFx(u.x, u.y - UNIT_H / 2); addPop(u.x, u.y - 52, 'Kalkan!', '#8fd3ff'); return; }
+  if (dmg <= 0 || !u.alive) return false;
+  // Kalkan ilk hasarı tamamen yutar, 2 sn mavi küre olarak görünüp kaybolur
+  if (u.shield) { u.shield = false; u.vx = 0; u.vy = 0; shieldFx(u); addPop(u.x, u.y - 52, 'Kalkan!', '#8fd3ff'); return true; }
   credit(u, Math.min(dmg, u.hp));
   u.hp = Math.max(0, u.hp - dmg);
   addPop(u.x, u.y - 52, '-' + dmg, u.team.c);
@@ -877,9 +879,11 @@ function hurt(u, dmg, linked) {
     for (const o of u.team.units) o.link = false;
     for (const o of group) hurt(o, dmg, true);
   }
+  return false;
 }
 
-function shieldFx(x, y) { bubbles.push({ x, y, t: 0 }); Sound.play('shield'); buzz(40); emit({ t: 'sh', x: r1(x), y: r1(y) }); }
+const BUBBLE_T = 2;
+function shieldFx(u) { const i = units.indexOf(u); bubbles.push({ i, t: 0 }); Sound.play('shield'); buzz(40); emit({ t: 'sh', i }); }
 
 function drown(u) {
   credit(u, u.hp);
@@ -984,11 +988,11 @@ function doPunch(power) {
   }
   punchFx(units.indexOf(u), !!target);
   if (!target) return;
-  if (target.team.side !== u.team.side) hurt(target, PUNCH_DMG);
-  const sp = 140 + power * 260, dirX = Math.sign(target.x - u.x) || u.facing;
+  if (target.team.side !== u.team.side && hurt(target, PUNCH_DMG)) return;   // kalkanlı asker kıpırdamaz
+  const sp = 140 + power * 200, dirX = Math.sign(target.x - u.x) || u.facing;
   target.vx = dirX * Math.max(Math.abs(dx), 0.5) * sp;
-  target.vy = Math.min(dy * sp, -(90 + power * 140));
-  target.grounded = false;
+  target.vy = Math.min(dy * sp, -(90 + power * 120));
+  target.grounded = false; target.punched = true;      // yere ilk değişte seker/kaymaz, denize kadar gitmesin
 }
 function punchFx(i, hit) {
   const u = units[i]; if (u) u.punchT = 0.3;
@@ -1018,7 +1022,12 @@ function dig(dir) {
     else if (bodyFree(nx, ny - 2, active.h)) { active.x = nx; active.y = ny - 2; }
   }
   active.vx = 0; active.vy = 0;
-  if (digLeft <= 0 && t.ammo[si] === 0) t.weapon = 0;
+  if (digLeft <= 0) endDig(t);
+}
+// Kazma bitti: küreği bırak, kazmadan önceki silaha geç. Turda bir atış hakkı kalır, atınca sıra geçer.
+function endDig(t) {
+  const prev = t.prevW !== undefined && t.prevW !== WI('shovel') && t.ammo[t.prevW] !== 0 ? t.prevW : 0;
+  if (WEAPONS[t.weapon].id === 'shovel') t.weapon = prev;
 }
 
 function explode(x, y, r, dmg) {
@@ -1030,7 +1039,7 @@ function explode(x, y, r, dmg) {
     const cx = u.x, cy = u.y - UNIT_H / 2, d = Math.hypot(cx - x, cy - y), R = r * 1.5;
     if (d >= R) continue;
     const f = 1 - d / R;
-    hurt(u, Math.round(dmg * (0.35 + 0.65 * f)));
+    if (hurt(u, Math.round(dmg * (0.35 + 0.65 * f)))) continue;   // kalkan yuttu: fırlatma yok
     const nx = (cx - x) / (d || 1), ny = (cy - y) / (d || 1), imp = 80 + 520 * f;
     u.vx = nx * imp; u.vy = ny * imp - 160 * f - 60; u.grounded = false;
   }
@@ -1419,7 +1428,7 @@ function onClientData(m) {
     case 'bo': if (inGame) bounceFx(); break;
     case 'fi': if (inGame) Sound.play('fire'); break;
     case 'pk': if (inGame) Sound.play('pickup'); break;
-    case 'sh': if (inGame) { bubbles.push({ x: +m.x, y: +m.y, t: 0 }); Sound.play('shield'); buzz(40); } break;
+    case 'sh': if (inGame) { bubbles.push({ i: m.i | 0, t: 0 }); Sound.play('shield'); buzz(40); } break;
     case 'pu': if (inGame && units[m.i | 0]) { units[m.i | 0].punchT = 0.3; Sound.play(m.h ? 'punch' : 'fire'); if (m.h) { shake = Math.min(12, shake + 4); buzz(35); } } break;
     case 'dg': if (inGame && terr) carve(+m.x, +m.y, clamp(+m.r, 4, 30)); break;
     case 'pt': if (inGame) { const i = m.i ? 1 : 0; Sound.play('portal'); for (let k = 0; k < 14; k++) { const a = Math.random() * 6.28, s = 30 + Math.random() * 90; parts.push({ kind: 'spark', c: PORTAL_COLORS[i], x: +m.x, y: +m.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, g: 0, size: 2 + Math.random() * 2, life: 0.5, max: 0.5 }); } } break;
@@ -1765,10 +1774,12 @@ function render(t) {
   for (const p of projs) drawProjectile(p, t);
   // Kalkan hasarı yuttuğu an beliren mavi küre
   for (const b of bubbles) {
-    const k = b.t / 0.6, R = 26 + k * 10;
-    const g = ctx.createRadialGradient(b.x - R * 0.3, b.y - R * 0.3, R * 0.1, b.x, b.y, R);
-    g.addColorStop(0, `rgba(220,240,255,${0.7 * (1 - k)})`); g.addColorStop(0.7, `rgba(78,161,255,${0.35 * (1 - k)})`); g.addColorStop(1, `rgba(78,161,255,${0.8 * (1 - k)})`);
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(b.x, b.y, R, 0, Math.PI * 2); ctx.fill();
+    // Askerin etrafında 2 sn kalır, son 0.5 sn'de söner
+    const u = units[b.i]; if (!u) continue;
+    const x = u.x, y = u.y - UNIT_H / 2, a = Math.min(1, (BUBBLE_T - b.t) / 0.5), R = 30 + Math.sin(b.t * 6) * 1.5;
+    const g = ctx.createRadialGradient(x - R * 0.3, y - R * 0.3, R * 0.1, x, y, R);
+    g.addColorStop(0, `rgba(220,240,255,${0.55 * a})`); g.addColorStop(0.7, `rgba(78,161,255,${0.25 * a})`); g.addColorStop(1, `rgba(78,161,255,${0.75 * a})`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
   }
   drawParticles();
   const [wx0] = toWorld(-40, 0), [wx1] = toWorld(vw + 40, 0);
@@ -1835,7 +1846,7 @@ function updateFx(dt) {
   for (const p of pops) p.t += dt;
   pops = pops.filter(p => p.t < 1.6);
   for (const b of bubbles) b.t += dt;
-  bubbles = bubbles.filter(b => b.t < 0.6);
+  bubbles = bubbles.filter(b => b.t < BUBBLE_T);
   for (const u of units) if (u.punchT > 0) u.punchT = Math.max(0, u.punchT - dt);
   shake *= 0.85; if (shake < 0.2) shake = 0;
 }
@@ -1897,9 +1908,11 @@ function updateHud() {
   $('bFire').style.setProperty('--p', input.charging ? input.power : 0);
   const goat = state === 'fly' && projs.some(p => p.type === 'goat');
   const wid = WEAPONS[t.weapon].id;
-  $('fireLbl').textContent = goat ? 'PATLAT' : ({ portal: 'PORTAL', punch: 'VUR', shovel: 'KÜREK' })[wid] || 'ATEŞ';
-  $('fireLbl').classList.toggle('sm', goat || wid === 'portal' || wid === 'shovel');
-  $('bFire').disabled = !mine || !(state === 'aim' || goat) || wid === 'shovel';
+  // Kürekle kazmaya başladıktan sonra ATEŞ açılır: basınca önceki silahla atış yapılır
+  const shovelIdle = wid === 'shovel' && !digging;
+  $('fireLbl').textContent = goat ? 'PATLAT' : shovelIdle ? 'KÜREK' : ({ portal: 'PORTAL', punch: 'VUR' })[wid] || 'ATEŞ';
+  $('fireLbl').classList.toggle('sm', goat || wid === 'portal' || shovelIdle);
+  $('bFire').disabled = !mine || !(state === 'aim' || goat) || shovelIdle;
   $('weaponName').textContent = wid === 'portal' ? 'Portal ' + (portalPending ? '2/2' : '1/2') : WEAPONS[t.weapon].name;
   $('weaponAmmo').textContent = 'Silah · ' + ammoText(t.ammo[t.weapon]);}
 
@@ -1939,7 +1952,8 @@ function firePress() {
   if (state !== 'aim' || !active || !active.alive) return;
   closeWeaponMenu();
   const t = team(), wid = WEAPONS[t.weapon].id;
-  if (wid === 'shovel') return;                          // kürek ATEŞ ile değil, oklarla kullanılır
+  // Kürek ATEŞ ile değil oklarla kullanılır. Kazdıktan sonra ATEŞ'e basılırsa önceki silahla atış yapılır.
+  if (wid === 'shovel') { if (!digging) return; endDig(t); return firePress(); }
   if (t.ammo[t.weapon] === 0 && !(wid === 'portal' && portalPending)) { t.weapon = 0; return; }
   if (wid === 'goat') { fire(0); return; }
   input.charging = true; input.power = 0;
@@ -1951,15 +1965,19 @@ function jump() {
   active.vy = -330; active.vx = active.facing * 130; active.grounded = false;
 }
 function toggleMap() { overview = !overview; cam.free = false; $('bMap').classList.toggle('on', overview); }
+// Kürek turda bir kez kullanılır: kazmaya başladıktan sonra tekrar seçilemez
+function weaponLocked(t, i) { return t.ammo[i] === 0 || (WEAPONS[i].id === 'shovel' && digging); }
 function selectWeapon(i) {
   if (state !== 'aim' || input.charging || i < 0 || i >= WEAPONS.length) return;
-  if (team().ammo[i] === 0) return;
-  team().weapon = i; closeWeaponMenu();
+  const t = team();
+  if (weaponLocked(t, i)) return;
+  if (WEAPONS[i].id === 'shovel' && WEAPONS[t.weapon].id !== 'shovel') t.prevW = t.weapon;
+  t.weapon = i; closeWeaponMenu();
 }
 
 // ---- Girdi (ekrandaki tuşlar ve dokunma) ----
 function pickWeapon(i) {
-  if (state !== 'aim' || input.charging || !myTurn() || !team() || team().ammo[i] === 0) return;
+  if (state !== 'aim' || input.charging || !myTurn() || !team() || weaponLocked(team(), i)) return;
   closeWeaponMenu();
   act('w', { i });
   if (mode === 'client') team().weapon = i;
@@ -1971,7 +1989,7 @@ function openWeaponMenu() {
     const b = document.createElement('button'); b.className = 'wbtn'; b.id = 'w-' + w.id;
     const a = team().ammo[i];
     b.setAttribute('aria-pressed', String(team().weapon === i));
-    b.disabled = a === 0;
+    b.disabled = weaponLocked(team(), i);
     const n = document.createElement('b'); n.textContent = w.name;
     const d = document.createElement('small'); d.textContent = w.desc;
     const e = document.createElement('em'); e.textContent = ammoText(a);
@@ -2326,7 +2344,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.se
 if (new URLSearchParams(location.search).has('test')) window.__t = {
   get state() { return state; }, get teams() { return teams; }, get units() { return units; }, get active() { return active; },
   get portals() { return portals; }, set portals(v) { portals = v; }, get crates() { return crates; }, get projs() { return projs; }, get moveLeft() { return moveLeft; },
-  get cam() { return cam; }, get mode() { return mode; }, get digLeft() { return digLeft; }, get W() { return W; }, WI, collect,
+  get cam() { return cam; }, get mode() { return mode; }, get digLeft() { return digLeft; }, get bubbles() { return bubbles; }, explode, get W() { return W; }, WI, collect,
   spawnCrate, surfaceY, setTimer(v) { timer = v; },
 };
 
