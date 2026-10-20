@@ -142,6 +142,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-
 .plist li i{width:12px;height:12px;border-radius:50%;flex:none}
 .plist li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .plist li small{color:var(--muted);font-size:11px}
+.plist li .pname{all:unset;flex:1;min-width:0;height:26px;font:600 16px var(--font-body);color:var(--paper);border-bottom:1px dashed var(--muted);user-select:text;-webkit-user-select:text}
+.plist li .pname:focus{border-bottom-color:var(--ember)}
+.sidebtn{flex:none;height:28px;padding:0 10px;border-radius:8px;border:none;font:13px var(--font-display);letter-spacing:.03em;color:#fff}
+.sidebtn.s0{background:#c43c3a}
+.sidebtn.s1{background:#2f7dd6}
+.sidebtn:disabled{cursor:default;opacity:.9}
 .plist li.empty{background:none;border:1px dashed var(--line);color:var(--muted);font-weight:400}
 .how{display:grid;gap:4px;font-size:12px;color:var(--muted);line-height:1.45;border-top:1px solid var(--line);padding-top:12px}
 .how b{color:var(--paper);font-weight:600}
@@ -239,7 +245,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-
           <ul class="plist" id="plist"></ul>
         </div>
         <div class="field">
-          <span class="flabel">Tim başına asker</span>
+          <span class="flabel">Oyun modu</span>
+          <div class="seg"><button id="lmFfa" aria-pressed="true">Herkes tek</button><button id="lmTeam" aria-pressed="false">Takımlı</button></div>
+        </div>
+        <div class="field">
+          <span class="flabel">Oyuncu başına asker</span>
           <div class="seg"><button id="ls2" aria-pressed="false">2</button><button id="ls3" aria-pressed="true">3</button><button id="ls4" aria-pressed="false">4</button></div>
         </div>
         <div class="field">
@@ -298,6 +308,15 @@ const TEAM_COLORS = [
   { name: 'Sarı Tim',  c: '#ffcb3d', d: '#9a700c' },
   { name: 'Mor Tim',   c: '#b884ff', d: '#5f35a6' },
 ];
+// Takım modunda iki taraf var; aynı takımdaki oyuncular aynı rengin tonlarını alır
+const SIDES = [
+  { name: 'Kızıl Takım', tones: [{ c: '#ef5350', d: '#8f2424' }, { c: '#ff9a62', d: '#a14a1c' }, { c: '#ff6fae', d: '#99305f' }] },
+  { name: 'Mavi Takım', tones: [{ c: '#4ea1ff', d: '#1d4f99' }, { c: '#45d3c7', d: '#17716a' }, { c: '#b884ff', d: '#5f35a6' }] },
+];
+function colorsFor(list, teamMode) {
+  const n = [0, 0];
+  return list.map((p, i) => { if (!teamMode) return TEAM_COLORS[i]; const s = p.side ? 1 : 0; return SIDES[s].tones[Math.min(2, n[s]++)]; });
+}
 const WEAPONS = [
   { id: 'bazooka', name: 'Bazuka', desc: 'Rüzgârdan etkilenir, çarpınca patlar' },
   { id: 'grenade', name: 'El Bombası', desc: 'Seker, 3 saniyede patlar' },
@@ -309,7 +328,7 @@ const START_AMMO = [-1, -1, 2, 1, 1];               // -1 = sınırsız
 const CRATE_WEAPONS = [2, 3, 4];
 const PORTAL_COLORS = ['#3ec5ff', '#ff9a3c'];
 const WORM_NAMES = ['Paşa', 'Kömür', 'Fındık', 'Tospik', 'Zeytin', 'Pamuk', 'Leblebi', 'Haydut', 'Sucuk', 'Pırasa', 'Boncuk', 'Lokum', 'Turşu', 'Kaju', 'Simit', 'Mantı'];
-const ID_PREFIX = 'camurcephesi-v4-';
+const ID_PREFIX = 'camurcephesi-v5-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 // Tohumlu rastgelelik: arazi tohumdan üretilir, böylece her telefon aynı haritayı kendisi çizer
@@ -325,14 +344,14 @@ let rng, solid, terr, tctx;
 let teams = [], units = [], projs = [], parts = [], pops = [], graves = [], crates = [], portals = [];
 let wind = 0, timer = TURN_TIME, state = 'menu', turnTeam = 0, active = null, winnerIdx = -1;
 let overview = false, shake = 0, settleT = 0, walkAcc = 0, bannerTimer = 0, toastTimer = 0, pid = 0, carveLog = [];
-let moveLeft = MOVE_MAX, portalPending = 0, portalReturn = false, ffTurn = 0;
+let moveLeft = MOVE_MAX, portalPending = 0, portalReturn = false, ffTurn = 0, gameMode = 'ffa', sidePtr = [-1, -1];
 const cam = { x: W / 2, y: H / 2, z: 1, user: 1, free: false };
 const input = { left: false, right: false, up: false, down: false, charging: false, power: 0 };
 const config = { teams: 2, size: 3, names: TEAM_COLORS.map(t => t.name) };
 
 // ---- Ağ durumu ----
 // 'local': tek telefon. 'host': oyunu yöneten telefon, fizik burada döner. 'client': hamlesini hosta yollar, görüntüyü ondan alır.
-let mode = 'local', peer = null, hostConn = null, mySlot = 0, players = [], lobbySize = 3, inGame = false, roomCode = '', lastInit = null;
+let mode = 'local', peer = null, hostConn = null, mySlot = 0, players = [], lobbySize = 3, lobbyMode = 'ffa', inGame = false, roomCode = '', lastInit = null, nmTimer = 0;
 let joinTimer = 0, pingTimer = 0, wnTimer = 0, joined = false, lastSnapSent = 0, lastSnapAt = 0, lastAimSent = 0, aimHoldUntil = 0, warnedStale = false, fxTick = 0;
 let myWorms = ['', '', '', ''];
 
@@ -652,16 +671,18 @@ function stepBlackHole(p) {
 const team = () => teams[turnTeam];
 function myTurn() { if (mode === 'local') return true; const t = team(); return !!t && t.slot === mySlot; }
 
-// opts: { seed, size, teams: [{ name, slot, wn }] }. Her telefon aynı tohumla aynı haritayı üretir.
+// opts: { seed, size, mode: 'ffa'|'team', teams: [{ name, slot, wn, side }] }. Her telefon aynı tohumla aynı haritayı üretir.
+// teams dizisindeki her kayıt bir oyuncudur; side, oyuncunun tarafıdır (herkes tek modunda herkesin tarafı kendisidir).
 function startGame(opts) {
   rng = mulberry32(opts.seed >>> 0);
   genTerrain();
   teams = []; units = []; projs = []; parts = []; pops = []; graves = []; crates = []; portals = []; carveLog = []; pid = 0;
   active = null; winnerIdx = -1; portalPending = 0; portalReturn = false; ffTurn = 0; moveLeft = MOVE_MAX;
-  const size = clamp(opts.size | 0, 2, 4);
-  opts.teams.slice(0, 4).forEach((tt, ti) => {
+  gameMode = opts.mode === 'team' ? 'team' : 'ffa'; sidePtr = [-1, -1];
+  const size = clamp(opts.size | 0, 2, 4), list = opts.teams.slice(0, 4), cols = colorsFor(list, gameMode === 'team');
+  list.forEach((tt, ti) => {
     const base = TEAM_COLORS[ti];
-    teams.push({ ...base, name: String(tt.name || '').trim().slice(0, 14) || base.name, slot: tt.slot, wn: Array.isArray(tt.wn) ? tt.wn : [], units: [], cur: -1, weapon: 0, ammo: START_AMMO.slice(), dmg: 0, ff: 0, skip: 0 });
+    teams.push({ ...base, ...cols[ti], name: String(tt.name || '').trim().slice(0, 14) || base.name, slot: tt.slot, side: gameMode === 'team' ? (tt.side ? 1 : 0) : ti, wn: Array.isArray(tt.wn) ? tt.wn : [], units: [], cur: -1, weapon: 0, ammo: START_AMMO.slice(), dmg: 0, ff: 0, skip: 0 });
   });
   const total = teams.length * size, xs = [];
   for (let tries = 0; xs.length < total && tries < 5000; tries++) {
@@ -689,18 +710,21 @@ function startGame(opts) {
 }
 
 function nextTurn() {
-  const alive = teams.filter(t => t.units.some(u => u.alive));
-  if (alive.length <= 1) { gameOver(alive[0]); return; }
-  // Dost ateşi cezası olan tim bir sırasını atlar
+  const aliveSides = [...new Set(teams.filter(t => t.units.some(u => u.alive)).map(t => t.side))];
+  if (aliveSides.length <= 1) { gameOver(aliveSides.length ? aliveSides[0] : -1); return; }
+  // Dost ateşi cezası olan oyuncu bir sırasını atlar
   const skipped = [];
-  let guard = 0;
-  do {
-    turnTeam = (turnTeam + 1) % teams.length;
-    const tt = teams[turnTeam];
-    if (!tt.units.some(u => u.alive)) continue;
-    if (tt.skip > 0 && guard < teams.length * 2) { tt.skip--; skipped.push(tt.name); continue; }
-    break;
-  } while (++guard < 40);
+  if (gameMode === 'team') pickTeamTurn(skipped);
+  else {
+    let guard = 0;
+    do {
+      turnTeam = (turnTeam + 1) % teams.length;
+      const tt = teams[turnTeam];
+      if (!tt.units.some(u => u.alive)) continue;
+      if (tt.skip > 0 && guard < teams.length * 2) { tt.skip--; skipped.push(tt.name); continue; }
+      break;
+    } while (++guard < 40);
+  }
   if (skipped.length) toastAll(skipped.join(', ') + ' cezalı: sırası atlandı');
   const t = teams[turnTeam];
   do { t.cur = (t.cur + 1) % t.units.length; } while (!t.units[t.cur].alive);
@@ -717,6 +741,24 @@ function nextTurn() {
   announceTurn();
 }
 
+// Takım modu: sıra takımlar arasında gidip gelir, takım içinde oyuncular sırayla oynar.
+// Cezalı oyuncunun sırası rakip takıma geçer.
+function pickTeamTurn(skipped) {
+  let side = team() ? team().side : 0;
+  for (let guard = 0; guard < 12; guard++) {
+    side = 1 - side;
+    const list = teams.filter(t => t.side === side);
+    let t = null;
+    for (let k = 0; k < list.length && !t; k++) {
+      sidePtr[side] = (sidePtr[side] + 1) % list.length;
+      if (list[sidePtr[side]].units.some(u => u.alive)) t = list[sidePtr[side]];
+    }
+    if (!t) continue;
+    if (t.skip > 0 && guard < 8) { t.skip--; skipped.push(t.name); continue; }
+    turnTeam = teams.indexOf(t); return;
+  }
+}
+
 function announceTurn() {
   const t = team(); if (!t) return;
   const mine = mode !== 'local' && myTurn();
@@ -727,17 +769,20 @@ function announceTurn() {
 
 function endTurn() { state = 'settle'; settleT = 0; input.charging = false; input.power = 0; portalPending = 0; portalReturn = false; closeWeaponMenu(); }
 
-function gameOver(t) {
+// side: kazanan taraf (herkes tek modunda kazanan oyuncunun sırası), -1 berabere
+function gameOver(side) {
   state = 'over';
-  winnerIdx = t ? teams.indexOf(t) : -1;
-  emit({ t: 'over', w: winnerIdx, st: teams.map(x => [x.dmg, x.ff]) });
-  showOver(t);
+  winnerIdx = side;
+  emit({ t: 'over', w: side, st: teams.map(x => [x.dmg, x.ff]) });
+  showOver(side);
 }
 
-function showOver(t) {
-  $('winnerTxt').textContent = t ? t.name + ' kazandı!' : 'Berabere';
-  $('winnerTxt').style.color = t ? t.c : 'var(--paper)';
-  $('overSub').textContent = t ? `Ayakta kalan ${t.units.filter(u => u.alive).length} asker` : 'Ayakta kalan asker yok.';
+function showOver(side) {
+  const members = teams.filter(t => t.side === side), tm = gameMode === 'team';
+  const left = members.reduce((s, t) => s + t.units.filter(u => u.alive).length, 0);
+  $('winnerTxt').textContent = members.length ? (tm ? SIDES[side].name : members[0].name) + ' kazandı!' : 'Berabere';
+  $('winnerTxt').style.color = members.length ? (tm ? SIDES[side].tones[0].c : members[0].c) : 'var(--paper)';
+  $('overSub').textContent = members.length ? (tm ? members.map(t => t.name).join(' & ') + ' · ' : '') + `Ayakta kalan ${left} asker` : 'Ayakta kalan asker yok.';
   buildAwards();
   $('againBtn').hidden = mode === 'client';
   $('lobbyBtn').hidden = mode !== 'host';
@@ -762,7 +807,7 @@ function buildAwards() {
   const mvp = teams.reduce((a, t) => (!a || t.dmg > a.dmg ? t : a), null);
   if (mvp && mvp.dmg > 0) award('', 'MVP', mvp, `Toplam ${mvp.dmg} hasar verdi`);
   const ff = teams.reduce((a, t) => (!a || t.ff > a.ff ? t : a), null);
-  if (ff && ff.ff > 0) award('ff', 'Yılın Dostu', ff, `Kendi askerlerine ${ff.ff} hasar verdi`);
+  if (ff && ff.ff > 0) award('ff', 'Yılın Dostu', ff, `${gameMode === 'team' ? 'Kendi takımına' : 'Kendi askerlerine'} ${ff.ff} hasar verdi`);
   const tbl = document.createElement('div'); tbl.className = 'dmgtable';
   for (const t of [...teams].sort((a, b) => b.dmg - a.dmg)) {
     const r = document.createElement('div');
@@ -773,11 +818,11 @@ function buildAwards() {
   box.appendChild(tbl);
 }
 
-// Hasar, o an sırası olan time yazılır. Kendi askerine verdiği hasar dost ateşidir.
+// Hasar, o an sırası olan oyuncuya yazılır. Kendi tarafına (kendi ya da takım arkadaşının askerine) verdiği hasar dost ateşidir.
 function credit(u, dmg) {
   const atk = team();
   if (!atk || dmg <= 0 || state === 'menu' || state === 'over') return;
-  if (u.team === atk) { if (u !== active && state === 'fly') { atk.ff += dmg; ffTurn += dmg; } }
+  if (u.team.side === atk.side) { if (u !== active && state === 'fly') { atk.ff += dmg; ffTurn += dmg; } }
   else atk.dmg += dmg;
 }
 
@@ -1067,14 +1112,14 @@ function teamGone(t) {
 }
 function cleanNames(a) { return Array.isArray(a) ? a.slice(0, 4).map(s => String(s || '').trim().slice(0, 12)) : []; }
 
-function lobbyMsg(p) { return { t: 'lobby', players: players.map(x => ({ name: x.name, slot: x.slot })), you: p.slot, size: lobbySize, code: roomCode }; }
+function lobbyMsg(p) { return { t: 'lobby', players: players.map(x => ({ name: x.name, slot: x.slot, side: x.side ? 1 : 0 })), you: p.slot, size: lobbySize, mode: lobbyMode, code: roomCode }; }
 function broadcastLobby() { for (const p of players) send(p.conn, lobbyMsg(p)); }
 
 function hostRoom() {
   if (!window.Peer) { $('homeStatus').textContent = 'Bağlantı kütüphanesi yüklenemedi. İnternetini kontrol edip sayfayı yenile.'; return; }
   goFullscreen(); saveName(); teardown();
-  mode = 'host'; mySlot = 0; inGame = false; lobbySize = 3;
-  players = [{ name: myName() || 'Oyuncu 1', slot: 0, conn: null, wn: myWorms.slice() }];
+  mode = 'host'; mySlot = 0; inGame = false; lobbySize = 3; lobbyMode = 'ffa';
+  players = [{ name: myName() || 'Oyuncu 1', slot: 0, conn: null, wn: myWorms.slice(), side: 0 }];
   showView('vLobby'); renderLobby();
   openHostPeer();
 }
@@ -1116,13 +1161,24 @@ function onHostData(conn, m) {
     if (inGame) { send(conn, { t: 'full', why: 'Oyun başlamış. Oda sahibi lobiye dönünce katılabilirsin.' }); setTimeout(() => conn.close(), 500); return; }
     if (players.length >= 4) { send(conn, { t: 'full', why: 'Oda dolu (4/4).' }); setTimeout(() => conn.close(), 500); return; }
     let slot = 1; while (players.some(p => p.slot === slot)) slot++;
-    players.push({ name: name || 'Oyuncu ' + (slot + 1), slot, conn, wn: cleanNames(m.wn) });
+    const onRed = players.filter(p => !p.side).length;      // yeni gelen, kalabalık olmayan takıma girer
+    players.push({ name: name || 'Oyuncu ' + (slot + 1), slot, conn, wn: cleanNames(m.wn), side: players.length - onRed < onRed ? 1 : 0 });
     players.sort((a, b) => a.slot - b.slot);
     conn.slot = slot;
     broadcastLobby(); renderLobby();
     return;
   }
   if (m.t === 'wn') { const p = players.find(p => p.conn === conn); if (p) p.wn = cleanNames(m.names); return; }
+  if (m.t === 'nm' && !inGame) {
+    const p = players.find(p => p.conn === conn), n = String(m.name || '').trim().slice(0, 14);
+    if (p && n) { p.name = n; broadcastLobby(); renderLobby(); }
+    return;
+  }
+  if (m.t === 'side' && !inGame) {
+    const p = players.find(p => p.conn === conn);
+    if (p) { p.side = m.s ? 1 : 0; broadcastLobby(); renderLobby(); }
+    return;
+  }
   if (m.t === 'act' && inGame && conn.slot !== undefined) {
     const t = team();
     if (t && t.slot === conn.slot) applyAct(m);
@@ -1143,11 +1199,11 @@ function onPeerLeft(conn) {
 function hostStart() {
   if (mode !== 'host') return;
   players = players.filter(p => !p.gone);
-  if (players.length < 2) { backToLobby(); return; }
+  if (players.length < 2 || !sidesReady()) { backToLobby(); return; }
   goFullscreen();
   inGame = true;
   players[0].wn = myWorms.slice();
-  lastInit = { seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0, teams: players.map(p => ({ name: p.name, slot: p.slot, wn: p.wn || [] })), size: lobbySize };
+  lastInit = { seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0, mode: lobbyMode, teams: players.map(p => ({ name: p.name, slot: p.slot, wn: p.wn || [], side: p.side ? 1 : 0 })), size: lobbySize };
   for (const p of players) send(p.conn, { t: 'init', ...lastInit, carves: [], you: p.slot });
   startGame(lastInit);
 }
@@ -1216,8 +1272,8 @@ function onClientData(m) {
   if (!m || typeof m !== 'object') return;
   switch (m.t) {
     case 'lobby':
-      players = Array.isArray(m.players) ? m.players.slice(0, 4).map(p => ({ name: String(p.name).slice(0, 14), slot: p.slot | 0 })) : [];
-      mySlot = m.you | 0; lobbySize = clamp(m.size | 0, 2, 4); roomCode = String(m.code || roomCode).slice(0, 4); inGame = false;
+      players = Array.isArray(m.players) ? m.players.slice(0, 4).map(p => ({ name: String(p.name).slice(0, 14), slot: p.slot | 0, side: p.side ? 1 : 0 })) : [];
+      mySlot = m.you | 0; lobbySize = clamp(m.size | 0, 2, 4); lobbyMode = m.mode === 'team' ? 'team' : 'ffa'; roomCode = String(m.code || roomCode).slice(0, 4); inGame = false;
       $('joinGo').disabled = false;
       if (state !== 'menu') exitToMenuUI();
       showView('vLobby'); renderLobby();
@@ -1244,7 +1300,7 @@ function onClientData(m) {
       if (!teams.length) break;
       state = 'over'; winnerIdx = m.w | 0;
       (Array.isArray(m.st) ? m.st : []).forEach((s, i) => { if (teams[i]) { teams[i].dmg = s[0] | 0; teams[i].ff = s[1] | 0; } });
-      showOver(teams[winnerIdx]);
+      showOver(winnerIdx);
       break;
     case 'toast': toast(String(m.text).slice(0, 80)); break;
   }
@@ -1572,16 +1628,19 @@ function render(t) {
     ctx.fillStyle = u.team.c; ctx.fillText(u.hp, x, y - 4);
     ctx.font = '600 11px Rubik, system-ui, sans-serif';
     ctx.strokeText(u.name, x, y - 18); ctx.fillStyle = '#fff4e6'; ctx.fillText(u.name, x, y - 18);
+    // Askerin sahibi olan oyuncunun adı, oyuncunun renginde
+    ctx.font = '800 10px Rubik, system-ui, sans-serif';
+    ctx.strokeText(u.team.name, x, y - 31); ctx.fillStyle = u.team.c; ctx.fillText(u.team.name, x, y - 31);
     if (u.traitor) {
       ctx.font = '12px "Lilita One", system-ui, sans-serif';
       const w = ctx.measureText('HAİN').width + 10;
-      ctx.fillStyle = '#ff4d5e'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - w / 2, y - 45, w, 16, 5) : ctx.rect(x - w / 2, y - 45, w, 16); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.fillText('HAİN', x, y - 33);
+      ctx.fillStyle = '#ff4d5e'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - w / 2, y - 58, w, 16, 5) : ctx.rect(x - w / 2, y - 58, w, 16); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText('HAİN', x, y - 46);
     }
   }
   if (active && active.alive && state === 'aim') {
     const [x, y] = toScreen(active.x, active.y - 30);
-    const b = Math.abs(Math.sin(t * 5)) * 5, top = active.traitor ? y - 50 : y - 34;
+    const b = Math.abs(Math.sin(t * 5)) * 5, top = active.traitor ? y - 62 : y - 44;
     ctx.fillStyle = '#fff4e6';
     ctx.beginPath(); ctx.moveTo(x - 7, top - 10 - b); ctx.lineTo(x + 7, top - 10 - b); ctx.lineTo(x, top - b); ctx.closePath(); ctx.fill();
   }
@@ -1861,29 +1920,74 @@ function exitToMenuUI() {
 function myName() { return $('myName').value.trim().slice(0, 14); }
 function saveName() { try { localStorage.setItem('camur-name', myName()); } catch (e) {} }
 
+// Takımlı modda iki takımda da en az bir oyuncu olmalı
+function sidesReady() { return lobbyMode !== 'team' || (players.some(p => p.side) && players.some(p => !p.side)); }
+
 function renderLobby(msg) {
   $('roomCode').textContent = roomCode || '····';
-  const host = mode === 'host';
+  const host = mode === 'host', tm = lobbyMode === 'team', cols = colorsFor(players, tm);
   $('shareBtn').hidden = !host || !roomCode;
+  // Liste her güncellemede yeniden çizilir; kendi adını yazarken imleç kaybolmasın
+  const fe = document.activeElement, focused = fe && fe.id === 'lobbyName', caret = focused ? fe.selectionStart : 0;
   const ul = $('plist'); ul.textContent = '';
   players.forEach((p, i) => {
-    const li = document.createElement('li');
-    const dot = document.createElement('i'); dot.style.background = TEAM_COLORS[i].c;
-    const n = document.createElement('span'); n.textContent = p.name;
-    const tag = document.createElement('small'); tag.textContent = [p.slot === 0 ? 'oda sahibi' : '', p.slot === mySlot ? 'sen' : ''].filter(Boolean).join(' · ');
-    li.append(dot, n, tag); ul.appendChild(li);
+    const li = document.createElement('li'), mine = p.slot === mySlot;
+    const dot = document.createElement('i'); dot.style.background = cols[i].c;
+    let n;
+    if (mine) {
+      n = document.createElement('input'); n.id = 'lobbyName'; n.className = 'pname'; n.maxLength = 14;
+      n.value = myName() || p.name; n.placeholder = 'Adını yaz'; n.setAttribute('aria-label', 'Adın');
+      n.addEventListener('input', onLobbyName);
+    } else { n = document.createElement('span'); n.textContent = p.name; }
+    li.append(dot, n);
+    if (tm) {
+      const b = document.createElement('button'); b.className = 'sidebtn s' + (p.side ? 1 : 0);
+      b.textContent = p.side ? 'Mavi' : 'Kızıl'; b.disabled = !(host || mine);
+      b.setAttribute('aria-label', p.name + ' takımı: ' + SIDES[p.side ? 1 : 0].name + '. Değiştirmek için dokun');
+      b.addEventListener('click', () => switchSide(p.slot));
+      li.append(b);
+    }
+    const tag = document.createElement('small'); tag.textContent = [p.slot === 0 ? 'oda sahibi' : '', mine ? 'sen' : ''].filter(Boolean).join(' · ');
+    li.append(tag); ul.appendChild(li);
   });
   for (let i = players.length; i < 4; i++) {
     const li = document.createElement('li'); li.className = 'empty'; li.textContent = 'Boş yer';
     ul.appendChild(li);
   }
+  if (focused && $('lobbyName')) { const el = $('lobbyName'); el.focus(); try { el.setSelectionRange(caret, caret); } catch (e) {} }
   $('pCount').textContent = players.length;
+  $('lmFfa').setAttribute('aria-pressed', String(!tm)); $('lmTeam').setAttribute('aria-pressed', String(tm));
+  $('lmFfa').disabled = $('lmTeam').disabled = !host;
   [2, 3, 4].forEach(n => { const b = $('ls' + n); b.setAttribute('aria-pressed', String(n === lobbySize)); b.disabled = !host; });
-  $('lobbyStart').hidden = !host; $('lobbyStart').disabled = players.length < 2 || !roomCode;
+  $('lobbyStart').hidden = !host; $('lobbyStart').disabled = players.length < 2 || !roomCode || !sidesReady();
   $('lobbyStatus').textContent = msg || (host
-    ? (!roomCode ? 'Oda açılıyor…' : players.length < 2 ? 'Arkadaşların bu kodu girerek ya da paylaştığın linkle katılsın.' : 'Herkes geldiyse savaşı başlat.')
-    : 'Oda sahibinin savaşı başlatması bekleniyor…');
+    ? (!roomCode ? 'Oda açılıyor…' : players.length < 2 ? 'Arkadaşların bu kodu girerek ya da paylaştığın linkle katılsın.'
+      : !sidesReady() ? 'Takımlı modda iki takımda da en az bir oyuncu olmalı.'
+      : tm ? 'Takım değiştirmek için rozete dokun. Herkes hazırsa başlat.' : 'Herkes geldiyse savaşı başlat.')
+    : tm ? 'Takımını değiştirmek için rozetine dokun. Oda sahibi başlatacak.' : 'Oda sahibinin savaşı başlatması bekleniyor…');
   buildWormInputs();
+}
+
+function onLobbyName(e) {
+  $('myName').value = e.target.value; saveName();
+  const n = myName();
+  clearTimeout(nmTimer);
+  if (mode === 'host') { if (players[0]) players[0].name = n || 'Oyuncu 1'; nmTimer = setTimeout(broadcastLobby, 250); }
+  else if (mode === 'client' && n) nmTimer = setTimeout(() => send(hostConn, { t: 'nm', name: n }), 300);
+}
+
+function switchSide(slot) {
+  const p = players.find(x => x.slot === slot); if (!p) return;
+  if (mode === 'host') { p.side = p.side ? 0 : 1; renderLobby(); broadcastLobby(); }
+  else if (slot === mySlot) send(hostConn, { t: 'side', s: p.side ? 0 : 1 });
+}
+
+function setLobbyMode(m) {
+  if (mode !== 'host') return;
+  lobbyMode = m;
+  // Takımlıya geçince herkes aynı taraftaysa sırayla dağıt
+  if (m === 'team' && !sidesReady()) players.forEach((p, i) => { p.side = i % 2; });
+  renderLobby(); broadcastLobby();
 }
 
 // Lobide her oyuncu kendi askerlerine ad verir; boş bırakılan asker hazır listeden ad alır
@@ -1961,6 +2065,8 @@ $('codeIn').addEventListener('input', e => { e.target.value = e.target.value.toU
 $('codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });
 $('shareBtn').addEventListener('click', shareInvite);
 $('lobbyStart').addEventListener('click', hostStart);
+$('lmFfa').addEventListener('click', () => setLobbyMode('ffa'));
+$('lmTeam').addEventListener('click', () => setLobbyMode('team'));
 $('leaveBtn').addEventListener('click', leaveRoom);
 $('startBtn').addEventListener('click', localStart);
 $('againBtn').addEventListener('click', () => mode === 'host' ? hostStart() : localStart());
