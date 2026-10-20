@@ -83,6 +83,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-
 .pad.wide b{font-size:14px;font-weight:800;white-space:nowrap}
 .fire{width:88px;height:88px;border-radius:50%;border:none;padding:6px;background:conic-gradient(var(--ember) calc(var(--p,0)*1turn),rgba(255,255,255,.14) 0);touch-action:none}
 .fire span{display:grid;place-items:center;width:100%;height:100%;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ff7a52,var(--flame) 60%,#9c2416);font-family:var(--font-display);font-size:19px;letter-spacing:.04em;box-shadow:inset 0 -4px 0 rgba(0,0,0,.25)}
+.fire span.sm{font-size:15px}
 .fire:active span{transform:scale(.95)}
 .fire[disabled]{opacity:.45}
 
@@ -184,6 +185,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-
     </div>
     <div class="cluster">
       <button class="pad" id="bMap" aria-label="Haritanın tamamını göster"><svg viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z M9 4v14 M15 6v14"/></svg></button>
+      <button class="pad wide" id="bPMode" hidden aria-label="Portal yönünü değiştir"><small>Portal</small><b id="pmodeTxt">Dikey</b></button>
       <button class="pad wide" id="bWeapon" aria-label="Silah seç"><small id="weaponAmmo">Silah</small><b id="weaponName">Bazuka</b></button>
       <button class="fire" id="bFire" aria-label="Basılı tut, bırakınca ateş et"><span id="fireLbl">ATEŞ</span></button>
     </div>
@@ -215,6 +217,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-
           <span><b>Kamera:</b> iki parmakla yakınlaştır ve kaydır. Sıra sende değilken tek parmakla da kaydırabilirsin.</span>
           <span><b>Hareket:</b> her turda sınırlı yürüme hakkın var, zıplamak da bu haktan yer.</span>
           <span><b>Dost ateşi:</b> kendi askerini vurursan hasarın yarısını sen alırsın, bir sonraki sıranı kaybedersin ve HAİN damgası yersin.</span>
+          <span><b>Portal:</b> dikey portaldan yürüyerek geçilir. Bir portalın üstüne portal açarsan kara delik oluşur.</span>
           <span><b>Online:</b> odayı kuranın ekranı açık kalmalı, oyunu onun telefonu yönetir.</span>
         </div>
       </section>
@@ -301,13 +304,13 @@ const WEAPONS = [
   { id: 'grenade', name: 'El Bombası', desc: 'Seker, 3 saniyede patlar' },
   { id: 'cluster', name: 'Misket Bombası', desc: 'Çarpınca 5 parçaya bölünür' },
   { id: 'goat', name: 'Deli Keçi', desc: 'Yürür, zıplar. Tekrar ATEŞ ile patlat' },
-  { id: 'portal', name: 'Portal Tabancası', desc: 'İki atışla iki portal aç; asker ve mermi içinden geçer' },
+  { id: 'portal', name: 'Portal Tabancası', desc: 'İki atışla iki portal aç. Dikey ya da yatay seçilir' },
 ];
 const START_AMMO = [-1, -1, 2, 1, 1];               // -1 = sınırsız
 const CRATE_WEAPONS = [2, 3, 4];
 const PORTAL_COLORS = ['#3ec5ff', '#ff9a3c'];
 const WORM_NAMES = ['Paşa', 'Kömür', 'Fındık', 'Tospik', 'Zeytin', 'Pamuk', 'Leblebi', 'Haydut', 'Sucuk', 'Pırasa', 'Boncuk', 'Lokum', 'Turşu', 'Kaju', 'Simit', 'Mantı'];
-const ID_PREFIX = 'camurcephesi-v2-';
+const ID_PREFIX = 'camurcephesi-v3-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 // Tohumlu rastgelelik: arazi tohumdan üretilir, böylece her telefon aynı haritayı kendisi çizer
@@ -320,7 +323,7 @@ const $ = id => document.getElementById(id);
 const cv = $('cv'), ctx = cv.getContext('2d');
 
 let rng, solid, terr, tctx;
-let teams = [], units = [], projs = [], parts = [], pops = [], graves = [], crates = [], portals = [null, null];
+let teams = [], units = [], projs = [], parts = [], pops = [], graves = [], crates = [], portals = [];
 let wind = 0, timer = TURN_TIME, state = 'menu', turnTeam = 0, active = null, winnerIdx = -1;
 let overview = false, shake = 0, settleT = 0, walkAcc = 0, bannerTimer = 0, toastTimer = 0, pid = 0, carveLog = [];
 let moveLeft = MOVE_MAX, portalPending = 0, portalReturn = false, ffTurn = 0;
@@ -406,6 +409,7 @@ const Sound = (() => {
       case 'pickup': osc('square', hz(76), 0, t, 0.09, 0.07); osc('square', hz(81), 0, t + 0.08, 0.09, 0.07); osc('square', hz(88), 0, t + 0.16, 0.2, 0.07); break;
       case 'portal': osc('sine', 260, 1500, t, 0.28, 0.22); osc('sine', 520, 2400, t + 0.04, 0.22, 0.08); break;
       case 'turn': osc('triangle', hz(84), 0, t, 0.22, 0.16); osc('triangle', hz(88), 0, t + 0.12, 0.35, 0.16); break;
+      case 'hole': osc('sine', 95, 26, t, 1.45, 0.5); nz(t, 1.4, 0.3, 'lowpass', 320, 60); osc('sawtooth', 50, 30, t, 1.4, 0.06); break;
       case 'traitor': osc('sawtooth', 220, 110, t, 0.5, 0.12); osc('sawtooth', 233, 116, t, 0.5, 0.1); break;
     }
   }
@@ -560,38 +564,107 @@ function fallDamage(u, speed) {
   hurt(u, Math.min(40, Math.round((speed - 520) / 7)));
 }
 
-// ---- Portallar: biri girişse diğeri çıkış; hız, iki portalın yönüne göre döndürülür ----
-function portalPair() { return portals[0] && portals[1] ? portals : null; }
-function portalVel(P, Q, vx, vy) {
-  const a = Math.atan2(Q.ny, Q.nx) - Math.atan2(-P.ny, -P.nx), c = Math.cos(a), s = Math.sin(a);
-  return [vx * c - vy * s, vx * s + vy * c];
+// ---- Portallar: her asker kendi çiftini (A/B) açar; biri giriş, diğeri çıkış ----
+// Yatay portal yüzeye yapışır. Dikey portal zeminde kapı gibi dikilir, içinden yürüyerek geçilir.
+// Portal, onu açan asker ölünce kapanır. Bir portalın üstüne portal açılırsa kara delik oluşur.
+const DOOR_H = 36;
+function portalCenter(P) { return P.door ? [P.x, P.y - DOOR_H / 2] : [P.x, P.y]; }
+function partnerOf(P) { return portals.find(Q => Q !== P && Q.o === P.o && Q.s !== P.s) || null; }
+function insidePortal(P, cx, cy, rad) {
+  const [px, py] = portalCenter(P);
+  if (P.door) return Math.abs(cx - px) < rad * 0.6 && Math.abs(cy - py) < DOOR_H / 2 + 4;
+  return Math.hypot(cx - px, cy - py) < rad;
 }
-function portalHit(cx, cy, rad) {
-  const pp = portalPair(); if (!pp) return null;
-  for (let i = 0; i < 2; i++) if (Math.hypot(cx - pp[i].x, cy - pp[i].y) < rad) return [pp[i], pp[1 - i], 1 - i];
+// Portaldan çıkan nesne bütün portallardan uzaklaşana kadar tekrar giremez: sonsuz gir-çık döngüsünü önler
+function rearm(o, cx, cy) {
+  if (o.parm !== false) return;
+  if (portals.every(P => { const [px, py] = portalCenter(P); return Math.hypot(cx - px, cy - py) > 34; })) o.parm = true;
+}
+function findEntry(o, cx, cy, rad) {
+  if (o.parm === false || (o.tpCount || 0) >= 8) return null;
+  for (const P of portals) { if (!insidePortal(P, cx, cy, rad)) continue; const Q = partnerOf(P); if (Q) return [P, Q]; }
   return null;
 }
+// Hızı giriş ve çıkış yönüne göre döndürür. Dikey kapıda yön, nesnenin yatay gidiş yönüdür.
+function portalVel(P, Q, vx, vy) {
+  const d = Math.sign(vx) || 1;
+  const nP = P.door ? [-d, 0] : [P.nx, P.ny], nQ = Q.door ? [d, 0] : [Q.nx, Q.ny];
+  const a = Math.atan2(nQ[1], nQ[0]) - Math.atan2(-nP[1], -nP[0]), c = Math.cos(a), s = Math.sin(a);
+  return [vx * c - vy * s, vx * s + vy * c];
+}
 function teleportUnit(u) {
-  if ((u.pcd || 0) > 0) return;
-  const hit = portalHit(u.x, u.y - UNIT_H / 2, 20); if (!hit) return;
-  const [P, Q, qi] = hit;
-  let [vx, vy] = portalVel(P, Q, u.vx || 0, u.vy || 0);
-  if (Math.hypot(vx, vy) < 150) { vx = Q.nx * 220; vy = Q.ny * 220 - 60; }
-  let off = 22;
-  while (off < 50 && !bodyFree(Q.x + Q.nx * off, Q.y + Q.ny * off + UNIT_H / 2, u.h)) off += 4;
-  u.x = Q.x + Q.nx * off; u.y = Q.y + Q.ny * off + UNIT_H / 2;
-  u.vx = vx; u.vy = vy; u.grounded = false; u.pcd = 0.8; walkAcc = 0;
-  portalFx(P.x, P.y, 1 - qi); portalFx(Q.x, Q.y, qi);
+  const cx = u.x, cy = u.y - UNIT_H / 2;
+  rearm(u, cx, cy);
+  const hit = findEntry(u, cx, cy, 20); if (!hit) return;
+  const [P, Q] = hit, d = Math.sign(u.vx || 0) || u.facing;
+  let x, y, vx, vy;
+  if (Q.door) { x = Q.x + d * 20; y = Q.y; vx = d * 150; vy = -140; }
+  else if (Q.ny < -0.6) { x = Q.x + d * 28; y = Q.y - 4; vx = d * 170; vy = -280; }   // zemindeki portaldan yana fırlar
+  else {
+    [vx, vy] = portalVel(P, Q, u.vx || 0, u.vy || 0);
+    if (Math.hypot(vx, vy) < 150) { vx = Q.nx * 220; vy = Q.ny * 220 - 60; }
+    x = Q.x + Q.nx * 22; y = Q.y + Q.ny * 22 + UNIT_H / 2;
+  }
+  for (let k = 0; k < 14 && !bodyFree(x, y, u.h); k++) y -= 3;
+  u.x = x; u.y = y; u.vx = vx; u.vy = vy; u.grounded = false; u.parm = false; u.tpCount = (u.tpCount || 0) + 1;
+  if (vx) u.facing = vx < 0 ? -1 : 1;
+  walkAcc = 0;
+  portalFx(...portalCenter(P), P.s); portalFx(...portalCenter(Q), Q.s);
 }
 function teleportProj(p, yOff) {
-  if ((p.pcd || 0) > 0) return false;
-  const hit = portalHit(p.x, p.y - yOff, 15); if (!hit) return false;
-  const [P, Q, qi] = hit;
-  const [vx, vy] = portalVel(P, Q, p.vx, p.vy);
-  p.x = Q.x + Q.nx * 18; p.y = Q.y + Q.ny * 18 + yOff; p.vx = vx; p.vy = vy; p.pcd = 0.3; p.resting = false;
+  const cx = p.x, cy = p.y - yOff;
+  rearm(p, cx, cy);
+  const hit = findEntry(p, cx, cy, 15); if (!hit) return false;
+  const [P, Q] = hit;
+  if (p.type === 'goat' && !p.vx) p.vx = p.dir * 90;
+  const [vx, vy] = portalVel(P, Q, p.vx, p.vy), [qx, qy] = portalCenter(Q);
+  if (Q.door) { p.x = qx + (Math.sign(vx) || 1) * 16; p.y = qy + yOff; }
+  else { p.x = qx + Q.nx * 18; p.y = qy + Q.ny * 18 + yOff; }
+  p.vx = vx; p.vy = vy; p.parm = false; p.tpCount = (p.tpCount || 0) + 1; p.resting = false;
   if (p.type === 'goat') { p.grounded = false; p.dir = vx < 0 ? -1 : 1; }
-  portalFx(Q.x, Q.y, qi);
+  portalFx(qx, qy, Q.s);
   return true;
+}
+function closePortalsOf(u) { const i = units.indexOf(u); portals = portals.filter(P => P.o !== i); }
+
+function placePortal(p, x, y, nrm) {
+  const hitP = portals.find(P => { const [px, py] = portalCenter(P); return Math.hypot(px - x, py - y) < 26; });
+  if (hitP) { portals = portals.filter(P => P !== hitP); blackHole(x, y); return; }
+  let door = false;
+  if (p.door) {
+    // Kapıyı zeminin üstüne oturt; zemin değilse ya da üstünde yer yoksa yatay açılır
+    let dx = x, dy = y, k = 0;
+    while (k++ < 30 && isSolid(dx, dy)) dy--;
+    k = 0; while (k++ < 12 && !isSolid(dx, dy + 1)) dy++;
+    if (isSolid(dx, dy + 1) && normalAt(dx, dy + 2).y < -0.5 && bodyFree(dx, dy - 1, DOOR_H)) { door = true; x = dx; y = dy; }
+  }
+  portals = portals.filter(P => !(P.o === p.o && P.s === p.slot));
+  const P = { x, y, nx: nrm.x, ny: nrm.y, door, o: p.o, s: p.slot };
+  portals.push(P);
+  portalFx(...portalCenter(P), p.slot);
+}
+
+function blackHole(x, y) {
+  addProj({ type: 'bhole', x, y, vx: 0, vy: 0, fuse: 1.4, r: 64, dmg: 50, age: 0 });
+  portalReturn = false; portalPending = 0;
+  if (team()) team().weapon = 0;
+  showBanner('KARA DELİK!', '#b884ff'); Sound.play('hole'); buzz(150);
+  emit({ t: 'bn', text: 'KARA DELİK!', c: '#b884ff', s: 'hole' });
+}
+function stepBlackHole(p) {
+  p.fuse -= DT;
+  for (const u of units) {
+    if (!u.alive) continue;
+    const dx = p.x - u.x, dy = p.y - (u.y - UNIT_H / 2), d = Math.hypot(dx, dy);
+    if (d > 190 || d < 3) continue;
+    const f = (1 - d / 190) * 1300 * DT;
+    u.vx = clamp((u.vx || 0) + dx / d * f, -420, 420); u.vy = clamp((u.vy || 0) + dy / d * f, -420, 420); u.grounded = false;
+  }
+  if (p.fuse <= 0) {
+    p.dead = true;
+    portals = portals.filter(P => { const [px, py] = portalCenter(P); return Math.hypot(px - p.x, py - p.y) > p.r + 10; });
+    explode(p.x, p.y, p.r, p.dmg);
+  }
 }
 
 // ---- Takımlar ve tur ----
@@ -602,12 +675,12 @@ function myTurn() { if (mode === 'local') return true; const t = team(); return 
 function startGame(opts) {
   rng = mulberry32(opts.seed >>> 0);
   genTerrain();
-  teams = []; units = []; projs = []; parts = []; pops = []; graves = []; crates = []; portals = [null, null]; carveLog = []; pid = 0;
+  teams = []; units = []; projs = []; parts = []; pops = []; graves = []; crates = []; portals = []; carveLog = []; pid = 0;
   active = null; winnerIdx = -1; portalPending = 0; portalReturn = false; ffTurn = 0; moveLeft = MOVE_MAX;
   const size = clamp(opts.size | 0, 2, 4);
   opts.teams.slice(0, 4).forEach((tt, ti) => {
     const base = TEAM_COLORS[ti];
-    teams.push({ ...base, name: String(tt.name || '').trim().slice(0, 14) || base.name, slot: tt.slot, wn: Array.isArray(tt.wn) ? tt.wn : [], units: [], cur: -1, weapon: 0, ammo: START_AMMO.slice(), dmg: 0, ff: 0, skip: 0 });
+    teams.push({ ...base, name: String(tt.name || '').trim().slice(0, 14) || base.name, slot: tt.slot, wn: Array.isArray(tt.wn) ? tt.wn : [], units: [], cur: -1, weapon: 0, ammo: START_AMMO.slice(), dmg: 0, ff: 0, skip: 0, pdoor: true });
   });
   const total = teams.length * size, xs = [];
   for (let tries = 0; xs.length < total && tries < 5000; tries++) {
@@ -656,6 +729,7 @@ function nextTurn() {
   timer = TURN_TIME; state = 'aim'; walkAcc = 0; moveLeft = MOVE_MAX; portalPending = 0; portalReturn = false; ffTurn = 0;
   input.charging = false; input.power = 0;
   input.left = input.right = input.up = input.down = false;
+  for (const u of units) u.tpCount = 0;
   cam.free = false;
   if (crates.length < 3 && rng() < 0.4) spawnCrate();
   emit({ t: 'turn', tt: turnTeam });
@@ -735,13 +809,13 @@ function hurt(u, dmg) {
 
 function drown(u) {
   credit(u, u.hp);
-  u.alive = false; u.hp = 0;
+  u.alive = false; u.hp = 0; closePortalsOf(u);
   splash(u.x, WATER);
   addPop(u.x, WATER - 30, 'Boğuldu', '#9fd4ff');
 }
 
 function kill(u) {
-  u.alive = false;
+  u.alive = false; closePortalsOf(u);
   graves.push({ x: u.x, y: u.y, c: u.team.c, ti: teams.indexOf(u.team) });
   explode(u.x, u.y - 8, 24, 14);
 }
@@ -788,7 +862,7 @@ function fire(power) {
   else if (w === 'goat') addProj({ type: 'goat', x: u.x + u.facing * 14, y: u.y, h: 14, vx: 0, vy: 0, grounded: false, dir: u.facing, fuse: 6, hop: 0.8, walk: 0, r: 60, dmg: 60, age: 0 });
   else {
     const slot = portalPending ? 1 : 0;
-    addProj({ type: 'pshot', x: sx, y: sy, vx: dx * 1100, vy: dy * 1100, slot, age: 0 });
+    addProj({ type: 'pshot', x: sx, y: sy, vx: dx * 1100, vy: dy * 1100, slot, o: units.indexOf(u), door: t.pdoor !== false, age: 0 });
     portalPending = slot === 0 ? 1 : 0; portalReturn = true;
     if (slot === 1) t.weapon = 0;
   }
@@ -854,6 +928,7 @@ function stepProjectile(p) {
   if (p.pcd) p.pcd = Math.max(0, p.pcd - DT);
   if (p.type === 'goat') { stepGoat(p); return; }
   if (p.type === 'pshot') { stepPortalShot(p); return; }
+  if (p.type === 'bhole') { stepBlackHole(p); return; }
   if (!p.resting) {
     if (p.wind) p.vx += wind * WIND_ACC * DT;
     p.vy += G * DT;
@@ -892,9 +967,11 @@ function stepPortalShot(p) {
     if (p.y > WATER + 4) { splash(p.x, WATER); p.dead = true; return; }
     if (p.x < -50 || p.x > W + 50 || p.y < -400 || p.age > 2) { p.dead = true; return; }
     if (isSolid(p.x, p.y)) {
-      const nrm = normalAt(p.x, p.y);
-      portals[p.slot] = { x: ox, y: oy, nx: nrm.x, ny: nrm.y };
-      portalFx(ox, oy, p.slot);
+      // Ayak dibine atışta mermi toprağın içinden başlayabilir: boşluğa çıkana kadar geri çek
+      const l = Math.hypot(p.vx, p.vy) || 1;
+      let bx = ox, by = oy, k = 0;
+      while (k++ < 30 && isSolid(bx, by)) { bx -= p.vx / l; by -= p.vy / l; }
+      placePortal(p, bx, by, normalAt(bx + p.vx / l * 2, by + p.vy / l * 2));
       p.dead = true; return;
     }
   }
@@ -1109,7 +1186,8 @@ function snapshot() {
     p: projs.map(p => [p.id, p.type, r1(p.x), r1(p.y), r1(p.vx), r1(p.vy), p.fuse !== undefined ? r2(p.fuse) : -1, p.type === 'pshot' ? p.slot : (p.dir || 0), p.grounded ? 1 : 0]),
     g: graves.map(g => [r1(g.x), r1(g.y), g.ti]),
     c: crates.map(c => [c.id, r1(c.x), r1(c.y), c.k, c.para ? 1 : 0]),
-    po: portals.map(P => P ? [r1(P.x), r1(P.y), r2(P.nx), r2(P.ny)] : 0),
+    po: portals.map(P => [r1(P.x), r1(P.y), r2(P.nx), r2(P.ny), P.door ? 1 : 0, P.o, P.s]),
+    pd: teams.map(t => t.pdoor ? 1 : 0),
   };
 }
 
@@ -1215,7 +1293,8 @@ function applySnap(s) {
   });
   graves = (s.g || []).map(a => ({ x: a[0], y: a[1], c: (teams[a[2]] || TEAM_COLORS[0]).c }));
   crates = (s.c || []).map(a => ({ id: a[0], x: a[1], y: a[2], k: a[3], para: !!a[4] }));
-  portals = (s.po || [0, 0]).slice(0, 2).map(a => a ? { x: a[0], y: a[1], nx: a[2], ny: a[3] } : null);
+  portals = (s.po || []).slice(0, 40).map(a => ({ x: a[0], y: a[1], nx: a[2], ny: a[3], door: !!a[4], o: a[5] | 0, s: a[6] ? 1 : 0 }));
+  (s.pd || []).forEach((v, i) => { if (teams[i]) teams[i].pdoor = !!v; });
   lastSnapAt = now; warnedStale = false;
 }
 
@@ -1271,6 +1350,7 @@ function applyAct(m) {
     case 'fr': fireRelease(); break;
     case 'j': jump(); break;
     case 'w': selectWeapon(m.i | 0); break;
+    case 'pm': if (state === 'aim' && team()) team().pdoor = !team().pdoor; break;
   }
 }
 
@@ -1370,6 +1450,14 @@ function drawProjectile(p, t) {
     const r = p.type === 'cluster' ? 6 : 3.2;
     ctx.fillStyle = '#2f2a38'; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#ffcb3d'; ctx.beginPath(); ctx.arc(0, 0, r * 0.4, 0, Math.PI * 2); ctx.fill();
+  } else if (p.type === 'bhole') {
+    const k = clamp(1 - (p.fuse || 0) / 1.4, 0, 1), R = 8 + k * 26;
+    const g = ctx.createRadialGradient(0, 0, R * 0.4, 0, 0, R * 2.2);
+    g.addColorStop(0, 'rgba(184,132,255,.55)'); g.addColorStop(1, 'rgba(184,132,255,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R * 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#05030a'; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#d9b8ff'; ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(0, 0, R * (1.15 + i * 0.22), t * (4 + i) + i * 2, t * (4 + i) + i * 2 + 1.6); ctx.stroke(); }
   } else if (p.type === 'pshot') {
     const c = PORTAL_COLORS[p.slot ? 1 : 0];
     ctx.shadowColor = c; ctx.shadowBlur = 12; ctx.fillStyle = c;
@@ -1413,13 +1501,20 @@ function drawCrate(c, t) {
   ctx.restore();
 }
 
-function drawPortal(P, i, t) {
-  const c = PORTAL_COLORS[i];
-  ctx.save(); ctx.translate(P.x, P.y); ctx.rotate(Math.atan2(P.ny, P.nx));
+// Halkanın rengi A/B (mavi/turuncu), ortadaki nokta portalı açan askerin tim rengi
+function drawPortal(P, t) {
+  const c = PORTAL_COLORS[P.s], owner = units[P.o], [px, py] = portalCenter(P);
+  const pulse = 1 + Math.sin(t * 5 + P.s) * 0.06, ox = P.door ? 0 : 3;
+  ctx.save(); ctx.translate(px, py);
+  if (!P.door) ctx.rotate(Math.atan2(P.ny, P.nx));
   ctx.shadowColor = c; ctx.shadowBlur = 16;
   ctx.fillStyle = c + '40'; ctx.strokeStyle = c; ctx.lineWidth = 3;
-  const pulse = 1 + Math.sin(t * 5 + i) * 0.06;
-  ctx.beginPath(); ctx.ellipse(3, 0, 6, 20 * pulse, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath();
+  if (P.door) ctx.ellipse(0, 0, 8, DOOR_H / 2 * pulse, 0, 0, Math.PI * 2);
+  else ctx.ellipse(ox, 0, 6, 20 * pulse, 0, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+  if (owner) { ctx.fillStyle = owner.team.c; ctx.strokeStyle = 'rgba(20,15,34,.8)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(ox, 0, 3.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
   ctx.restore();
 }
 
@@ -1476,7 +1571,7 @@ function render(t) {
   const z = cam.z;
   ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * (vw / 2 - cam.x * z + sxo), dpr * (vh / 2 - cam.y * z + syo));
   ctx.drawImage(terr, 0, 0);
-  portals.forEach((P, i) => { if (P) drawPortal(P, i, t); });
+  for (const P of portals) drawPortal(P, t);
   for (const g of graves) {
     ctx.save(); ctx.translate(g.x, g.y); ctx.scale(1.3, 1.3);
     ctx.fillStyle = '#b9b2c4'; ctx.strokeStyle = '#4b4458'; ctx.lineWidth = 1.2;
@@ -1535,6 +1630,11 @@ function render(t) {
 }
 
 function updateFx(dt) {
+  // Kara deliğe doğru çekilen kıvılcımlar (her ekranda yerel olarak üretilir)
+  for (const h of projs) if (h.type === 'bhole') for (let i = 0; i < 3; i++) {
+    const a = Math.random() * 6.28, r = 90 + Math.random() * 70;
+    parts.push({ kind: 'spark', c: Math.random() < 0.5 ? '#b884ff' : '#fff4e6', x: h.x + Math.cos(a) * r, y: h.y + Math.sin(a) * r, vx: -Math.cos(a) * r * 1.8, vy: -Math.sin(a) * r * 1.8, g: 0, size: 1.5 + Math.random() * 1.5, life: 0.5, max: 0.5 });
+  }
   for (const p of parts) {
     p.life -= dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
     if (p.kind === 'dirt' && isSolid(p.x, p.y)) p.life = Math.min(p.life, 0.05);
@@ -1589,9 +1689,12 @@ function updateHud() {
   const goat = state === 'fly' && projs.some(p => p.type === 'goat');
   const wid = WEAPONS[t.weapon].id;
   $('fireLbl').textContent = goat ? 'PATLAT' : wid === 'portal' ? 'PORTAL' : 'ATEŞ';
+  $('fireLbl').classList.toggle('sm', goat || wid === 'portal');
   $('bFire').disabled = !mine || !(state === 'aim' || goat);
   $('weaponName').textContent = wid === 'portal' ? 'Portal ' + (portalPending ? '2/2' : '1/2') : WEAPONS[t.weapon].name;
   $('weaponAmmo').textContent = 'Silah · ' + ammoText(t.ammo[t.weapon]);
+  $('bPMode').hidden = !(mine && state === 'aim' && wid === 'portal');
+  $('pmodeTxt').textContent = t.pdoor ? 'Dikey' : 'Yatay';
 }
 
 function showBanner(text, color) {
@@ -1748,6 +1851,7 @@ function holdButton(el, key) {
 holdButton($('bL'), 'left'); holdButton($('bR'), 'right');
 $('bJ').addEventListener('pointerdown', e => { e.preventDefault(); act('j'); });
 $('bMap').addEventListener('click', toggleMap);
+$('bPMode').addEventListener('click', () => { act('pm'); if (mode === 'client' && team()) team().pdoor = !team().pdoor; });
 $('bWeapon').addEventListener('click', () => $('weaponMenu').hidden ? openWeaponMenu() : closeWeaponMenu());
 const bFire = $('bFire');
 bFire.addEventListener('pointerdown', e => { e.preventDefault(); bFire.setPointerCapture(e.pointerId); act('fp'); });
@@ -1762,6 +1866,7 @@ addEventListener('keydown', e => {
   else if (e.code === 'Space') { if (!e.repeat) act('fp'); e.preventDefault(); }
   else if (e.code === 'Enter') act('j');
   else if (e.code === 'KeyM') toggleMap();
+  else if (e.code === 'KeyP') act('pm');
   else if (/^Digit[1-5]$/.test(e.code)) pickWeapon(+e.code.slice(5) - 1);
 });
 addEventListener('keyup', e => {
@@ -1913,9 +2018,9 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.se
 // Otomatik testler için iç duruma erişim; sadece adres ?test ile açılınca
 if (new URLSearchParams(location.search).has('test')) window.__t = {
   get state() { return state; }, get teams() { return teams; }, get units() { return units; }, get active() { return active; },
-  get portals() { return portals; }, get crates() { return crates; }, get projs() { return projs; }, get moveLeft() { return moveLeft; },
+  get portals() { return portals; }, set portals(v) { portals = v; }, get crates() { return crates; }, get projs() { return projs; }, get moveLeft() { return moveLeft; },
   get cam() { return cam; }, get mode() { return mode; },
-  spawnCrate, setTimer(v) { timer = v; },
+  spawnCrate, surfaceY, setTimer(v) { timer = v; },
 };
 
 // ---- Döngü ----
