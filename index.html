@@ -7,8 +7,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Çamur Cephesi">
-<title>Çamur Cephesi</title>
+<meta name="apple-mobile-web-app-title" content="Gaşmerlerr">
+<title>Gaşmerlerr</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -112,6 +112,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-
 .lead{margin:0;color:var(--muted);font-size:14px;line-height:1.5;max-width:60ch}
 .tip{margin:0;font-size:13px;line-height:1.45;padding:10px 12px;border-radius:12px;background:rgba(143,211,255,.08);border:1px solid rgba(143,211,255,.25);color:#d6ecff}
 .tip b{color:#fff}
+.link.inline{display:inline;padding:0;color:#8fd3ff;text-decoration:underline}
+.gtitle{margin:0;font:28px/1.1 var(--font-display);color:var(--paper)}
+.steps{margin:0;padding-left:22px;display:grid;gap:10px;font-size:15px;line-height:1.45}
+.steps li::marker{font-family:var(--font-display);color:var(--ember)}
+.steps b{color:#fff}
 .field{display:grid;gap:7px}
 .field > label,.field > .flabel{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .txt{all:unset;height:46px;padding:0 14px;border-radius:12px;background:rgba(255,255,255,.06);border:2px solid transparent;font:600 16px var(--font-body);color:var(--paper);user-select:text;-webkit-user-select:text}
@@ -203,7 +208,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-
   <div class="overlay" id="menu">
     <div class="card">
       <button class="sndbtn" data-snd aria-label="Sesi aç/kapat"></button>
-      <h1 class="logo">Çamur<br><em>Cephesi</em></h1>
+      <h1 class="logo">Gaşmer<em>lerr</em></h1>
+      <div class="tip" id="iosTip" hidden><b>iPhone'da tam ekran için</b> oyunu ana ekrana ekleyip oradan açman gerekiyor. <button class="link inline" id="iosHow">Nasıl yapılır?</button></div>
 
       <div class="field" id="nameField">
         <label for="myName">Adın</label>
@@ -212,7 +218,6 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-
 
       <section class="view" id="vHome">
         <p class="lead">Sırayla nişan al, araziyi patlatarak oy, rakip timleri suya dök. Ayakta kalan son tim kazanır. 4 kişiye kadar, herkes kendi telefonundan oynar.</p>
-        <p class="tip" id="iosTip" hidden><b>Tam ekran için:</b> Safari'de alttaki Paylaş düğmesine dokun, <b>Ana Ekrana Ekle</b>'yi seç ve oyunu ana ekrandaki simgeden aç.</p>
         <button class="go" id="hostBtn">Oda kur</button>
         <button class="alt" id="joinBtn">Odaya katıl</button>
         <p class="status" id="homeStatus"></p>
@@ -278,6 +283,17 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-
         <button class="go" id="startBtn">Savaşı başlat</button>
         <button class="link" id="localBack">Geri</button>
       </section>
+    </div>
+  </div>
+
+  <div class="overlay" id="iosGuide" hidden>
+    <div class="card">
+      <h2 class="gtitle">iPhone'da tam ekran</h2>
+      <p class="lead" id="iosIntro"></p>
+      <ol class="steps" id="iosSteps"></ol>
+      <p class="tip" id="iosNote"></p>
+      <button class="alt" id="iosCopy" hidden>Linki kopyala</button>
+      <button class="go" id="iosOk">Tamam</button>
     </div>
   </div>
 
@@ -2015,7 +2031,7 @@ function buildWormInputs() {
 async function shareInvite() {
   const url = location.origin + location.pathname + '?oda=' + roomCode;
   try {
-    if (navigator.share) { await navigator.share({ title: 'Çamur Cephesi', text: 'Çamur Cephesi odama gel! Kod: ' + roomCode, url }); return; }
+    if (navigator.share) { await navigator.share({ title: 'Gaşmerlerr', text: 'Gaşmerlerr odama gel! Kod: ' + roomCode, url }); return; }
   } catch (e) { if (e && e.name === 'AbortError') return; }
   try { await navigator.clipboard.writeText(url); toast('Davet linki kopyalandı'); }
   catch (e) { toast(url); }
@@ -2082,6 +2098,63 @@ try {
   if (Array.isArray(w)) myWorms = cleanNames(w).concat(['', '', '', '']).slice(0, 4);
 } catch (e) {}
 $('iosTip').hidden = !(isIOS && !isStandalone());
+
+// iPhone'da ana ekrana ekleme rehberi: adımlar tarayıcıya göre değişir
+const IOS_GUIDES = {
+  safari: {
+    intro: 'Safari\'de oyunu ana ekrana ekleyince adres çubuğu olmadan, uygulama gibi açılır.',
+    steps: ['Adres çubuğunun yanındaki <b>•••</b> düğmesine dokun. (Eski iOS sürümlerinde bu adım yok, alttaki Paylaş düğmesi doğrudan görünür.)',
+      '<b>Paylaş</b>\'a dokun (yukarı oklu kare simge).',
+      'Açılan listeyi aşağı kaydır ve <b>Ana Ekrana Ekle</b>\'yi seç.',
+      '<b>Web Uygulaması Olarak Aç</b> açık kalsın, sağ üstteki <b>Ekle</b>\'ye dokun.',
+      'Oyunu artık ana ekrandaki <b>Gaşmerlerr</b> simgesinden aç.'],
+    note: 'Listede Ana Ekrana Ekle yoksa en alttaki <b>Eylemleri Düzenle</b>\'ye dokunup ekleyebilirsin.',
+  },
+  chrome: {
+    intro: 'Chrome\'da da ana ekrana ekleyebilirsin (iOS 16.4 ve sonrası).',
+    steps: ['Adres çubuğunun sağındaki <b>Paylaş</b> düğmesine dokun (yukarı oklu kare simge).',
+      'Listede <b>Ana Ekrana Ekle</b>\'yi seç. Görmüyorsan listeyi aşağı kaydır.',
+      'Sağ üstteki <b>Ekle</b>\'ye dokun.',
+      'Oyunu artık ana ekrandaki <b>Gaşmerlerr</b> simgesinden aç.'],
+    note: 'Bu seçenek çıkmazsa linki kopyalayıp Safari\'de aç ve oradan ekle; Safari\'de en sorunsuz yöntem budur.',
+  },
+  other: {
+    intro: 'Bu tarayıcı iPhone\'da ana ekrana eklemeyi desteklemiyor. Bunu Safari\'den yapman gerekiyor.',
+    steps: ['Aşağıdaki <b>Linki kopyala</b>\'ya dokun.',
+      '<b>Safari</b>\'yi aç, adres çubuğuna linki yapıştır ve aç.',
+      'Safari\'de adres çubuğunun yanındaki <b>•••</b> düğmesine, ardından <b>Paylaş</b>\'a dokun.',
+      'Listeyi aşağı kaydırıp <b>Ana Ekrana Ekle</b>\'yi seç, sonra <b>Ekle</b>\'ye dokun.',
+      'Oyunu ana ekrandaki <b>Gaşmerlerr</b> simgesinden aç.'],
+    note: 'Opera, Firefox gibi tarayıcılarda bu seçenek ya hiç yok ya da güvenilir çalışmıyor.',
+  },
+};
+function iosBrowser() {
+  const ua = navigator.userAgent;
+  if (/OPiOS|OPT\/|OPX\/|FxiOS|DuckDuckGo|YaBrowser|GSA\//.test(ua)) return 'other';
+  if (/CriOS|EdgiOS/.test(ua)) return 'chrome';
+  return 'safari';
+}
+function openIosGuide() {
+  const g = IOS_GUIDES[iosBrowser()], ol = $('iosSteps');
+  $('iosIntro').textContent = g.intro;
+  ol.innerHTML = g.steps.map(s => '<li>' + s + '</li>').join('');   // sabit metin, kullanıcı girdisi yok
+  $('iosNote').innerHTML = g.note;
+  $('iosCopy').hidden = g !== IOS_GUIDES.other && g !== IOS_GUIDES.chrome;
+  $('iosGuide').hidden = false;
+}
+$('iosHow').addEventListener('click', openIosGuide);
+$('iosOk').addEventListener('click', () => { $('iosGuide').hidden = true; });
+$('iosCopy').addEventListener('click', async () => {
+  const url = location.origin + location.pathname + (roomCode ? '?oda=' + roomCode : '');
+  try { await navigator.clipboard.writeText(url); toast('Link kopyalandı, Safari\'de yapıştır'); } catch (e) { toast(url); }
+});
+
+// Canvas'a çizilen yazılar (HAİN, asker adları) Türkçe harflerin font dosyasını kendisi indirtmez:
+// İ, Ş, Ğ gibi harfler yedek fontla bozuk görünmesin diye bu dosyaları baştan yükle
+if (document.fonts && document.fonts.load) {
+  const TR = 'İıŞşĞğÜüÖöÇç HAİN Gaşmerlerr';
+  ['16px "Lilita One"', '400 16px Rubik', '600 16px Rubik', '800 16px Rubik'].forEach(f => document.fonts.load(f, TR).catch(() => {}));
+}
 const invite = new URLSearchParams(location.search).get('oda');
 if (invite) { $('codeIn').value = invite.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4); showView('vJoin'); }
 else showView('vHome');
