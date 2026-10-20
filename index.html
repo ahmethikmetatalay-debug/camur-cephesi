@@ -644,7 +644,7 @@ function teleportUnit(u) {
   const hit = findEntry(u, cx, cy, 24); if (!hit) return;
   const [P, Q] = hit, d = Math.sign(u.vx || 0) || u.facing;
   let x, y, vx, vy;
-  if (Q.ny < -0.6) { x = Q.x + d * 34; y = Q.y - 4; vx = d * 170; vy = -280; }   // zemindeki portaldan yana fırlar
+  if (Q.ny < -0.6) { x = Q.x + d * 34; y = Q.y - 4; vx = d * 90; vy = -190; }    // zemindeki portaldan hafifçe yana savrulur (~90 px)
   else {
     [vx, vy] = portalVel(P, Q, u.vx || 0, u.vy || 0);
     if (Math.hypot(vx, vy) < 150) { vx = Q.nx * 220; vy = Q.ny * 220 - 60; }
