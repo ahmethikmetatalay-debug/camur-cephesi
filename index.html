@@ -928,7 +928,7 @@ function collect(c, u) {
   }
   if (kind === 'hp') { u.hp += Math.max(0, Math.min(35, 150 - u.hp)); addPop(u.x, y, '+35 can', '#8fe36b'); }
   else if (kind === 'weapon') { const k = CRATE_WEAPONS[Math.floor(rng() * CRATE_WEAPONS.length)]; if (a[k] >= 0) a[k]++; addPop(u.x, y, '+1 ' + WEAPONS[k].name, '#ffcb3d'); }
-  else if (kind === 'shovel') { a[WI('shovel')]++; addPop(u.x, y, '+1 Kürek', '#e9d3a8'); }
+  else if (kind === 'shovel') { a[WI('shovel')] += 5; addPop(u.x, y, '+5 Kürek', '#e9d3a8'); }   // tek sandık 5 turluk kazma hakkı
   else if (kind === 'shield') { u.shield = true; addPop(u.x, y, 'Kalkan', '#8fd3ff'); }
   else {
     const mates = u.team.units.filter(o => o.alive);
