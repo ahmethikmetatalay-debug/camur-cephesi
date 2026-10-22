@@ -352,7 +352,7 @@ let W = 1500;                                       // 5-6 oyuncuda harita geni�
 const H = 800, WATER = 760, G = 620, WIND_ACC = 150, TURN_TIME = 45, DT = 1 / 60;
 const UNIT_H = 30, UNIT_SCALE = 1.875;             // asker çizimi, ilk sürümün 1.875 katı
 const MAX_PLAYERS = 6;
-const MOVE_MAX = 90, JUMP_COST = 25;                // tur başına yürüme hakkı (piksel)
+const MOVE_MAX = 81, JUMP_COST = 25;                // tur başına yürüme hakkı (piksel)
 const TEAM_COLORS = [
   { name: 'Kızıl Tim', c: '#ef5350', d: '#8f2424' },
   { name: 'Mavi Tim',  c: '#4ea1ff', d: '#1d4f99' },
@@ -382,14 +382,14 @@ const WEAPONS = [
   { id: 'airstrike', name: 'Hele İki Gözüm', desc: 'Gömülü altın sandıktan çıkar. Haritada hedefe dokun, F-16 bombalasın (99 hasar)' },
 ];
 const WI = id => WEAPONS.findIndex(w => w.id === id);
-const START_AMMO = WEAPONS.map(w => ({ cluster: 2, goat: 1, portal: 1, shovel: 0, lasso: 0, airstrike: 0 })[w.id] ?? -1);   // -1 = sınırsız
+const START_AMMO = WEAPONS.map(w => ({ cluster: 2, goat: 1, portal: 1, shovel: 0, lasso: 1, airstrike: 0 })[w.id] ?? -1);   // -1 = sınırsız; herkes oyuna 1 kementle başlar
 const LASSO_V = 900, LASSO_MAX = 650;                // kement: yerçekimsiz, dümdüz gider
 const JET_V = 420, JET_Y = 70, JET_LEAD = 2.6;       // F-16 hedefin üstüne ~2,6 sn'de gelir (ses 5 sn)
 const ABOMB_N = 5, ABOMB_GAP = 34, ABOMB_DMG = 99, ABOMB_R = 44;
 const SETTLE_SHOT = 3;                               // atıştan sonra kamera vuruş yerinde bu kadar bekler (sn)
 const CRATE_WEAPONS = [WI('cluster'), WI('goat'), WI('portal')];
 const PUNCH_DMG = 10, PUNCH_REACH = 34;
-const DIG_MAX = MOVE_MAX * 2, DIG_R = 18;           // kürek: yürüme hakkının 2 katı tünel
+const DIG_MAX = 180, DIG_R = 18;                    // kürek: bir kullanımda 180 px tünel
 const PORTAL_COLORS = ['#3ec5ff', '#ff9a3c'];
 const WORM_NAMES = ['Paşa', 'Kömür', 'Fındık', 'Tospik', 'Zeytin', 'Pamuk', 'Leblebi', 'Haydut', 'Sucuk', 'Pırasa', 'Boncuk', 'Lokum', 'Turşu', 'Kaju', 'Simit', 'Mantı'];
 const ID_PREFIX = 'gasmerler-v9-';
@@ -1012,11 +1012,13 @@ function buryGoldCrates() {
     for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; if (isSolid(x + Math.cos(a) * (RX + 22), y + Math.sin(a) * (RY + 22))) n++; }
     return n >= 23;
   };
-  for (const [lo, hi] of [[0.18, 0.42], [0.58, 0.82]]) {
-    for (let tries = 0; tries < 40; tries++) {
+  // Önce haritanın sol ve sağ yarısında ara; bir yarıda yer yoksa haritanın kalanında, diğer sandıktan uzakta ara
+  for (const [lo, hi] of [[0.18, 0.42], [0.58, 0.82], [0.08, 0.92]]) {
+    if (out.length >= 2) break;
+    for (let tries = 0; tries < 150; tries++) {
       const x = Math.round(W * (lo + rng() * (hi - lo))), top = surfaceY(x);
-      if (top === null) continue;
-      const y = Math.round(top + 120 + rng() * 60);
+      if (top === null || out.some(o => Math.abs(o.x - x) < W * 0.25)) continue;
+      const y = Math.round(top + 110 + rng() * 90);
       if (y > WATER - RY - 50 || !enclosed(x, y)) continue;
       carveSolid(x, y, RX, RY);
       tctx.save(); tctx.globalCompositeOperation = 'source-atop'; tctx.fillStyle = 'rgba(42,22,14,.6)';
@@ -1040,7 +1042,8 @@ function stepCrates() {
     c.vy = c.para ? 75 : Math.min(600, c.vy + G * DT);
     const n = Math.max(1, Math.ceil(c.vy * DT));
     for (let i = 0; i < n; i++) { if (isSolid(c.x, c.y + 1)) break; c.y += c.vy * DT / n; }
-    if (c.y > WATER + 4) { splash(c.x, WATER); c.dead = true; }
+    if (c.k === 1 && c.y > WATER - 2) { c.y = WATER - 2; c.vy = 0; c.para = false; }   // altın sandık batmaz, suyun üstünde yüzer
+    else if (c.y > WATER + 4) { splash(c.x, WATER); c.dead = true; }
   }
   for (const c of crates) {
     if (c.dead) continue;
@@ -1220,7 +1223,8 @@ function endDig(t) {
   if (WEAPONS[t.weapon].id === 'shovel') t.weapon = prev;
 }
 
-function explode(x, y, r, dmg) {
+// kb: fırlatma çarpanı (bazuka 0,75: vurduğu askeri daha az fırlatır)
+function explode(x, y, r, dmg, kb = 1) {
   explodeFx(x, y, r);
   if (mode === 'host') carveLog.push([r1(x), r1(y), r]);
   emit({ t: 'x', x: r1(x), y: r1(y), r });
@@ -1231,11 +1235,11 @@ function explode(x, y, r, dmg) {
     const f = 1 - d / R;
     if (hurt(u, Math.round(dmg * (0.35 + 0.65 * f)))) continue;   // kalkan yuttu: fırlatma yok
     const nx = (cx - x) / (d || 1), ny = (cy - y) / (d || 1), imp = 80 + 520 * f;
-    u.vx = nx * imp; u.vy = ny * imp - 160 * f - 60; u.grounded = false;
+    u.vx = nx * imp * kb; u.vy = (ny * imp - 160 * f - 60) * kb; u.grounded = false;
   }
   for (const p of projs) if (p.resting) p.resting = false;
-  // Patlamaya yakalanan sandık da patlar
-  const chain = crates.filter(c => !c.dead && Math.hypot(c.x - x, c.y - 9 - y) < r + 8);
+  // Patlamaya yakalanan sürpriz sandık da patlar; gömülü altın sandık hiçbir şeyden etkilenmez
+  const chain = crates.filter(c => !c.dead && c.k !== 1 && Math.hypot(c.x - x, c.y - 9 - y) < r + 8);
   for (const c of chain) c.dead = true;
   if (chain.length) crates = crates.filter(c => !c.dead);
   for (const c of chain) explode(c.x, c.y - 9, 30, 22);
@@ -1335,7 +1339,7 @@ function stepPortalShot(p) {
 
 function detonate(p) {
   p.dead = true;
-  explode(p.x, p.y, p.r, p.dmg);
+  explode(p.x, p.y, p.r, p.dmg, p.type === 'rocket' ? 0.75 : 1);
   if (p.type === 'cluster') for (let i = 0; i < 5; i++) {
     addProj({ type: 'frag', x: p.x, y: p.y - 6, vx: (rng() * 2 - 1) * 220, vy: -180 - rng() * 220, impact: true, r: 22, dmg: 20, age: 0.2 });
   }
