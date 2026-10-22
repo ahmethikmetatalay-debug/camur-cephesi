@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: icon-map (24×24 px). Tek renk beyaz. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="0.125" y="0.125" width="23.75" height="23.75" fill="none" stroke="#ff00aa" stroke-width="0.25" stroke-dasharray="1.5 1"/>
+  </g>
+</svg>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: proj-goat-b (128×96 px). Deli keçi adım 2. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="96" viewBox="0 0 128 96">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="0.16" y="0.16" width="127.68" height="95.68" fill="none" stroke="#ff00aa" stroke-width="0.32" stroke-dasharray="1.92 1.28"/>
+    <line x1="56" y1="92" x2="72" y2="92" stroke="#ff2a2a" stroke-width="0.32"/><line x1="64" y1="84" x2="64" y2="100" stroke="#ff2a2a" stroke-width="0.32"/><circle cx="64" cy="92" r="2" fill="#ff2a2a"/>
+    <text x="1.28" y="4.724705882352941" font-size="3.764705882352941" fill="#ff00aa" font-family="Arial">proj-goat-b · 128×96 · Deli keçi adım 2</text>
+  </g>
+</svg>

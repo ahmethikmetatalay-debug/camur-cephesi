@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: parachute (176×112 px). Paraşüt; ipler alt kenara iner. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="176" height="112" viewBox="0 0 176 112">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="0.22" y="0.22" width="175.56" height="111.56" fill="none" stroke="#ff00aa" stroke-width="0.44" stroke-dasharray="2.64 1.76"/>
+    <line x1="77" y1="112" x2="99" y2="112" stroke="#ff2a2a" stroke-width="0.44"/><line x1="88" y1="101" x2="88" y2="123" stroke="#ff2a2a" stroke-width="0.44"/><circle cx="88" cy="112" r="2.75" fill="#ff2a2a"/>
+    <text x="1.76" y="6.496470588235295" font-size="5.176470588235294" fill="#ff00aa" font-family="Arial">parachute · 176×112 · Paraşüt; ipler alt kenara iner</text>
+  </g>
+</svg>

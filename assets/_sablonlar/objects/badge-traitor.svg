@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: badge-traitor (120×48 px). HAİN rozeti. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="48" viewBox="0 0 120 48">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="0.15" y="0.15" width="119.7" height="47.7" fill="none" stroke="#ff00aa" stroke-width="0.3" stroke-dasharray="1.7999999999999998 1.2"/>
+    <line x1="52.5" y1="24" x2="67.5" y2="24" stroke="#ff2a2a" stroke-width="0.3"/><line x1="60" y1="16.5" x2="60" y2="31.5" stroke="#ff2a2a" stroke-width="0.3"/><circle cx="60" cy="24" r="1.875" fill="#ff2a2a"/>
+    <text x="1.2" y="4.429411764705883" font-size="3.5294117647058822" fill="#ff00aa" font-family="Arial">badge-traitor · 120×48 · HAİN rozeti</text>
+  </g>
+</svg>

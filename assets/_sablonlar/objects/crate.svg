@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: crate (80×80 px). Sürpriz sandık, soru işaretli. Kırmızı nokta = alt orta. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="0.125" y="0.125" width="79.75" height="79.75" fill="none" stroke="#ff00aa" stroke-width="0.25" stroke-dasharray="1.5 1"/>
+    <line x1="35" y1="80" x2="45" y2="80" stroke="#ff2a2a" stroke-width="0.25"/><line x1="40" y1="75" x2="40" y2="85" stroke="#ff2a2a" stroke-width="0.25"/><circle cx="40" cy="80" r="1.25" fill="#ff2a2a"/>
+    <text x="1" y="3.1029411764705883" font-size="2.3529411764705883" fill="#ff00aa" font-family="Arial">crate · 80×80 · Sürpriz sandık, soru işaretli. Kırmızı nokta = alt orta</text>
+  </g>
+</svg>

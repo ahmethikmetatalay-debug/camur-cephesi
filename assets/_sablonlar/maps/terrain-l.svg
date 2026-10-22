@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: terrain-l (3800×1600 px). 5-6 oyuncu arazisi. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="3800" height="1600" viewBox="0 0 3800 1600">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="4.75" y="4.75" width="3790.5" height="1590.5" fill="none" stroke="#ff00aa" stroke-width="9.5" stroke-dasharray="57 38"/>
+    <line x1="0" y1="1520" x2="3800" y2="1520" stroke="#2b6cff" stroke-width="4" stroke-dasharray="24 12"/><text x="20" y="1505" font-size="40" fill="#2b6cff" font-family="Arial">SU ÇİZGİSİ y=1520 — altı suyun altında</text>
+    <rect x="0" y="0" width="120" height="1600" fill="#2b6cff" opacity="0.08"/><rect x="3680" y="0" width="120" height="1600" fill="#2b6cff" opacity="0.08"/><text x="140" y="80" font-size="36" fill="#2b6cff" font-family="Arial">Arazi sol/sağ kenara değmesin · yürünecek yerlerin üstünde ≥120 px boşluk · en ince yer ≥40 px</text>
+    <text x="38" y="68.5" font-size="40" fill="#ff00aa" font-family="Arial">terrain-l · 3800×1600 · 5-6 oyuncu arazisi</text>
+  </g>
+</svg>

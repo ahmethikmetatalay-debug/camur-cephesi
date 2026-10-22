@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: proj-cluster (64×64 px). Misket bombası. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="0.125" y="0.125" width="63.75" height="63.75" fill="none" stroke="#ff00aa" stroke-width="0.25" stroke-dasharray="1.5 1"/>
+    <line x1="28" y1="32" x2="36" y2="32" stroke="#ff2a2a" stroke-width="0.25"/><line x1="32" y1="28" x2="32" y2="36" stroke="#ff2a2a" stroke-width="0.25"/><circle cx="32" cy="32" r="1" fill="#ff2a2a"/>
+    <text x="1" y="2.6323529411764706" font-size="1.8823529411764706" fill="#ff00aa" font-family="Arial">proj-cluster · 64×64 · Misket bombası</text>
+  </g>
+</svg>

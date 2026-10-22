@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: weapon-grenade (96×64 px). Elde el bombası. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="64" viewBox="0 0 96 64">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="0.125" y="0.125" width="95.75" height="63.75" fill="none" stroke="#ff00aa" stroke-width="0.25" stroke-dasharray="1.5 1"/>
+    <line x1="10" y1="32" x2="22" y2="32" stroke="#ff2a2a" stroke-width="0.25"/><line x1="16" y1="26" x2="16" y2="38" stroke="#ff2a2a" stroke-width="0.25"/><circle cx="16" cy="32" r="1.5" fill="#ff2a2a"/>
+    <text x="1" y="3.573529411764706" font-size="2.823529411764706" fill="#ff00aa" font-family="Arial">weapon-grenade · 96×64 · Elde el bombası</text>
+  </g>
+</svg>

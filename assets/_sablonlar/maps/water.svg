@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: water (512×128 px). Su yüzeyi, yatayda ucu ucuna eklenebilir. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="128" viewBox="0 0 512 128">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="0.64" y="0.64" width="510.72" height="126.72" fill="none" stroke="#ff00aa" stroke-width="1.28" stroke-dasharray="7.68 5.12"/>
+    <text x="5.12" y="18.898823529411764" font-size="15.058823529411764" fill="#ff00aa" font-family="Arial">water · 512×128 · Su yüzeyi, yatayda ucu ucuna eklenebilir</text>
+  </g>
+</svg>

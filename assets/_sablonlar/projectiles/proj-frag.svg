@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: proj-frag (32×32 px). Misket parçası. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="0.125" y="0.125" width="31.75" height="31.75" fill="none" stroke="#ff00aa" stroke-width="0.25" stroke-dasharray="1.5 1"/>
+    <line x1="13" y1="16" x2="19" y2="16" stroke="#ff2a2a" stroke-width="0.25"/><line x1="16" y1="13" x2="16" y2="19" stroke="#ff2a2a" stroke-width="0.25"/><circle cx="16" cy="16" r="0.75" fill="#ff2a2a"/>
+  </g>
+</svg>

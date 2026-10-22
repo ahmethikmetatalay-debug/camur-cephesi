@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: proj-rocket (96×32 px). Roket, burnu sağda. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="32" viewBox="0 0 96 32">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="0.125" y="0.125" width="95.75" height="31.75" fill="none" stroke="#ff00aa" stroke-width="0.25" stroke-dasharray="1.5 1"/>
+    <line x1="42" y1="16" x2="54" y2="16" stroke="#ff2a2a" stroke-width="0.25"/><line x1="48" y1="10" x2="48" y2="22" stroke="#ff2a2a" stroke-width="0.25"/><circle cx="48" cy="16" r="1.5" fill="#ff2a2a"/>
+    <text x="1" y="3.573529411764706" font-size="2.823529411764706" fill="#ff00aa" font-family="Arial">proj-rocket · 96×32 · Roket, burnu sağda</text>
+  </g>
+</svg>

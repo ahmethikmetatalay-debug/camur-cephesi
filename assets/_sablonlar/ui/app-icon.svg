@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: app-icon (1024×1024 px). Ana ekran simgesi. Kesikli iç kare = güvenli alan (%10 pay). Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="1.28" y="1.28" width="1021.44" height="1021.44" fill="none" stroke="#ff00aa" stroke-width="2.56" stroke-dasharray="15.36 10.24"/>
+    <rect x="102" y="102" width="820" height="820" fill="none" stroke="#00a2ff" stroke-width="3" stroke-dasharray="18 12"/>
+    <text x="10.24" y="37.79764705882353" font-size="30.11764705882353" fill="#ff00aa" font-family="Arial">app-icon · 1024×1024 · Ana ekran simgesi. Kesikli iç kare = güvenli alan (%10 pay)</text>
+  </g>
+</svg>

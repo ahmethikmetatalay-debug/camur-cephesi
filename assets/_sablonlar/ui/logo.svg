@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: logo (880×240 px). Logo (SVG teslim). Menüde en fazla 440 px genişlik. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="240" viewBox="0 0 880 240">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="1.1" y="1.1" width="877.8" height="237.8" fill="none" stroke="#ff00aa" stroke-width="2.2" stroke-dasharray="13.200000000000001 8.8"/>
+    <text x="8.8" y="32.48235294117647" font-size="25.88235294117647" fill="#ff00aa" font-family="Arial">logo · 880×240 · Logo (SVG teslim). Menüde en fazla 440 px genişlik</text>
+  </g>
+</svg>

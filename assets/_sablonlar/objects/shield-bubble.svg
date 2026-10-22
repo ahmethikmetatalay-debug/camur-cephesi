@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: shield-bubble (256×256 px). Kalkan küresi, yarı saydam mavi. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="0.32" y="0.32" width="255.36" height="255.36" fill="none" stroke="#ff00aa" stroke-width="0.64" stroke-dasharray="3.84 2.56"/>
+    <line x1="112" y1="128" x2="144" y2="128" stroke="#ff2a2a" stroke-width="0.64"/><line x1="128" y1="112" x2="128" y2="144" stroke="#ff2a2a" stroke-width="0.64"/><circle cx="128" cy="128" r="4" fill="#ff2a2a"/>
+    <text x="2.56" y="9.449411764705882" font-size="7.529411764705882" fill="#ff00aa" font-family="Arial">shield-bubble · 256×256 · Kalkan küresi, yarı saydam mavi</text>
+  </g>
+</svg>

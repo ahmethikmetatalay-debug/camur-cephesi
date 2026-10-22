@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: bg-sky (1920×1080 px). Gökyüzü. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="2.4" y="2.4" width="1915.2" height="1075.2" fill="none" stroke="#ff00aa" stroke-width="4.8" stroke-dasharray="28.799999999999997 19.2"/>
+    <text x="19.2" y="54.4" font-size="40" fill="#ff00aa" font-family="Arial">bg-sky · 1920×1080 · Gökyüzü</text>
+  </g>
+</svg>

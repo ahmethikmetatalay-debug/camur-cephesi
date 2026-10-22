@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: bg-near (3840×1080 px). Yakın katman, yatayda ucu ucuna eklenebilir, üstü şeffaf. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="1080" viewBox="0 0 3840 1080">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="4.8" y="4.8" width="3830.4" height="1070.4" fill="none" stroke="#ff00aa" stroke-width="9.6" stroke-dasharray="57.599999999999994 38.4"/>
+    <text x="38.4" y="68.8" font-size="40" fill="#ff00aa" font-family="Arial">bg-near · 3840×1080 · Yakın katman, yatayda ucu ucuna eklenebilir, üstü şeffaf</text>
+  </g>
+</svg>

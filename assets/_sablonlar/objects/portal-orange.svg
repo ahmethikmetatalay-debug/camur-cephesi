@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: portal-orange (64×176 px). Portal B. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="176" viewBox="0 0 64 176">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="0.22" y="0.22" width="63.56" height="175.56" fill="none" stroke="#ff00aa" stroke-width="0.44" stroke-dasharray="2.64 1.76"/>
+    <line x1="21" y1="88" x2="43" y2="88" stroke="#ff2a2a" stroke-width="0.44"/><line x1="32" y1="77" x2="32" y2="99" stroke="#ff2a2a" stroke-width="0.44"/><circle cx="32" cy="88" r="2.75" fill="#ff2a2a"/>
+    <text x="1.76" y="6.496470588235295" font-size="5.176470588235294" fill="#ff00aa" font-family="Arial">portal-orange · 64×176 · Portal B</text>
+  </g>
+</svg>

@@ -1,0 +1,18 @@
+Gaşmerler - grafik ve ses dosyaları
+
+Tam rehber (liste, boyutlar, dosya adları): https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+
+_sablonlar\  Her dosya için ölçülü SVG şablonu. Illustrator'da aç, CIZIM katmanına çiz,
+              KILAVUZ katmanını gizleyip 1x ölçekte PNG (şeffaf) olarak dışa aktar.
+              Şablon boyutları zaten 4x (haritalar 2x) olduğu için ayrıca büyütme gerekmez.
+
+Bitmiş dosyaları şu klasörlere, rehberdeki adlarla koy:
+  worm\         asker pozları ve -tint katmanları, mezar
+  weapons\      elde tutulan silahlar
+  projectiles\  mermiler
+  objects\      sandık, paraşüt, portallar, kara delik, kalkan, HAİN rozeti
+  maps\<harita-adi>\  her harita konsepti ayrı klasörde
+  ui\           logo, uygulama ikonu, kontrol ve silah ikonları
+  sounds\       MP3 ses efektleri ve lobi müziği
+
+Bir grup bitince Claude'a "şu grup hazır" demen yeterli.

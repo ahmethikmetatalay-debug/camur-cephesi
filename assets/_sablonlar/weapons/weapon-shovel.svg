@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gaşmerlerr şablonu: weapon-shovel (128×64 px). Kürek; ağzı sağ uçta. Rehber: https://claude.ai/code/artifact/9f5acf38-9f5e-4e6e-9c0f-86f6edfdd278
+     KILAVUZ katmanını dışa aktarmadan önce gizle ya da sil. Çizimini CIZIM katmanına yap. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="64" viewBox="0 0 128 64">
+  <g id="CIZIM"></g>
+  <g id="KILAVUZ" opacity="0.9">
+    <rect x="0.16" y="0.16" width="127.68" height="63.68" fill="none" stroke="#ff00aa" stroke-width="0.32" stroke-dasharray="1.92 1.28"/>
+    <line x1="4" y1="32" x2="20" y2="32" stroke="#ff2a2a" stroke-width="0.32"/><line x1="12" y1="24" x2="12" y2="40" stroke="#ff2a2a" stroke-width="0.32"/><circle cx="12" cy="32" r="2" fill="#ff2a2a"/>
+    <text x="1.28" y="4.724705882352941" font-size="3.764705882352941" fill="#ff00aa" font-family="Arial">weapon-shovel · 128×64 · Kürek; ağzı sağ uçta</text>
+  </g>
+</svg>
