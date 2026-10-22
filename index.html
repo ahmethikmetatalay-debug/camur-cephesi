@@ -383,7 +383,7 @@ const WEAPONS = [
 ];
 const WI = id => WEAPONS.findIndex(w => w.id === id);
 const START_AMMO = WEAPONS.map(w => ({ cluster: 2, goat: 1, portal: 1, shovel: 0, lasso: 1, airstrike: 0 })[w.id] ?? -1);   // -1 = sınırsız; herkes oyuna 1 kementle başlar
-const LASSO_V = 900, LASSO_MAX = 650;                // kement: yerçekimsiz, dümdüz gider
+const LASSO_V = 900, LASSO_MAX = 650, LASSO_PULL = 420, LASSO_DMG = 15;   // kement: yerçekimsiz, dümdüz gider; sandığı çeker, rakibi kırbaçlar
 const JET_V = 420, JET_Y = 70, JET_LEAD = 2.6;       // F-16 hedefin üstüne ~2,6 sn'de gelir (ses 5 sn)
 const ABOMB_N = 5, ABOMB_GAP = 34, ABOMB_DMG = 99, ABOMB_R = 44;
 const SETTLE_SHOT = 3;                               // atıştan sonra kamera vuruş yerinde bu kadar bekler (sn)
@@ -523,6 +523,7 @@ const Sound = (() => {
       case 'traitor': osc('sawtooth', 220, 110, t, 0.5, 0.12); osc('sawtooth', 233, 116, t, 0.5, 0.1); break;
       case 'punch': osc('sine', 170, 55, t, 0.16, 0.7); nz(t, 0.09, 0.35, 'lowpass', 1400, 300); break;
       case 'shield': osc('sine', 880, 1500, t, 0.28, 0.14); osc('triangle', 1320, 2200, t + 0.03, 0.22, 0.06); break;
+      case 'whip': nz(t, 0.05, 0.55, 'highpass', 3200, 0); osc('square', 2200, 500, t, 0.045, 0.09); nz(t + 0.03, 0.08, 0.2, 'bandpass', 1800, 900); break;
     }
   }
   return {
@@ -1064,6 +1065,7 @@ function spawnCrate() {
 }
 function stepCrates() {
   for (const c of crates) {
+    if (c.pulled) continue;   // kementle çekilen sandık düşmez, onu ip taşır
     if (isSolid(c.x, c.y + 1) || isSolid(c.x - 7, c.y + 1) || isSolid(c.x + 7, c.y + 1)) { c.para = false; c.vy = 0; continue; }
     c.vy = c.para ? 75 : Math.min(600, c.vy + G * DT);
     const n = Math.max(1, Math.ceil(c.vy * DT));
@@ -1073,6 +1075,7 @@ function stepCrates() {
   }
   for (const c of crates) {
     if (c.dead) continue;
+    if (c.pulled) continue;   // çekilen sandığı yoldaki başka asker kapamaz
     for (const u of units) if (u.alive && Math.hypot(u.x - c.x, (u.y - UNIT_H / 2) - (c.y - 9)) < 28) { collect(c, u); break; }
   }
   crates = crates.filter(c => !c.dead);
@@ -1126,7 +1129,7 @@ function fire(power) {
     // Kement turu bitirmez: ip geri gelince aynı turda atış yapılabilir
     addProj({ type: 'lasso', x: sx, y: sy, vx: dx * LASSO_V, vy: dy * LASSO_V, ox: sx, oy: sy, age: 0 });
     portalReturn = true; if (t.ammo[wi] === 0) t.weapon = 0;
-    Sound.play('fire'); emit({ t: 'fi' });
+    whipFx();   // şak!
     state = 'fly'; input.charging = false; input.power = 0; cam.free = false; return;
   }
   shotThisTurn = true;
@@ -1165,13 +1168,34 @@ function stepJet(p) {
   }
   if (!p.drops.length && (p.dir > 0 ? p.x > W + 260 : p.x < -260)) p.dead = true;
 }
-// Kement: yerçekimsiz, dümdüz gider. Sandığa değerse alır; toprağa çarparsa ya da çok uzağa giderse boşa gider
+// Kement: yerçekimsiz, dümdüz gider ve kırbaç gibi şaklar.
+// Sandığa değerse ilmikler, sandık iple askerin yanına sürüklenir ve içindeki o zaman alınır (tur bitmez).
+// Rakip askere değerse kırbaçlar: 15 hasar, biraz geri iter, tur biter. Kendi tarafının içinden geçer.
+// Toprağa çarparsa ya da çok uzağa giderse boşa gider.
+function whipFx() { Sound.play('whip'); buzz(25); emit({ t: 'wh' }); }
 function stepLasso(p) {
+  if (p.pull) {
+    const c = crates.find(c => c.id === p.pull);
+    if (!c || c.dead || !active || !active.alive) { if (c) c.pulled = false; p.dead = true; return; }
+    const hx = active.x, hy = active.y - AIM_Y + 10, dx = hx - c.x, dy = hy - c.y, d = Math.hypot(dx, dy);
+    if (d < 24) { c.pulled = false; collect(c, active); p.dead = true; return; }
+    const s = Math.min(d, LASSO_PULL * DT);
+    c.x += dx / d * s; c.y += dy / d * s; c.vy = 0; c.para = false;
+    p.x = c.x; p.y = c.y - 12; p.vx = dx / d; p.vy = dy / d;
+    return;
+  }
   const n = Math.max(1, Math.ceil(LASSO_V * DT / 3));
   for (let i = 0; i < n; i++) {
     p.x += p.vx * DT / n; p.y += p.vy * DT / n;
-    const c = crates.find(c => !c.dead && Math.hypot(p.x - c.x, p.y - (c.y - 10)) < 20);
-    if (c) { if (active && active.alive) collect(c, active); p.dead = true; return; }
+    const c = crates.find(c => !c.dead && !c.pulled && Math.hypot(p.x - c.x, p.y - (c.y - 10)) < 20);
+    if (c) { p.pull = c.id; p.grounded = true; c.pulled = true; c.para = false; c.vy = 0; whipFx(); return; }   // grounded: client'a "çekiliyor" bilgisi
+    const foe = active && units.find(u => u.alive && u.team.side !== active.team.side && Math.hypot(p.x - u.x, p.y - (u.y - UNIT_H / 2)) < 16);
+    if (foe) {
+      whipFx(); holdCam(foe.x, foe.y - 20);
+      if (!hurt(foe, LASSO_DMG)) { foe.vx = (Math.sign(p.vx) || 1) * 170; foe.vy = -130; foe.grounded = false; }
+      shotThisTurn = true; portalReturn = false;   // kırbaç saldırıdır: tur biter
+      p.dead = true; return;
+    }
     if (isSolid(p.x, p.y) || Math.hypot(p.x - p.ox, p.y - p.oy) > LASSO_MAX || p.x < -50 || p.x > W + 50 || p.y < -400 || p.y > WATER) {
       addPop(p.x, p.y - 10, 'Iska', '#e9d3a8'); p.dead = true; return;
     }
@@ -1656,6 +1680,7 @@ function onClientData(m) {
     case 'fi': if (inGame) Sound.play('fire'); break;
     case 'pk': if (inGame) Sound.play('pickup'); break;
     case 'as': if (inGame) { Sound.sample('helegoz'); Sound.jet(JET_LEAD); buzz(60); } break;
+    case 'wh': if (inGame) { Sound.play('whip'); buzz(25); } break;
     case 'sh': if (inGame) { bubbles.push({ i: m.i | 0, t: 0 }); Sound.play('shield'); buzz(40); } break;
     case 'pu': if (inGame && units[m.i | 0]) { units[m.i | 0].punchT = 0.3; Sound.play(m.h ? 'punch' : 'fire'); if (m.h) { shake = Math.min(12, shake + 4); buzz(35); } } break;
     case 'dg': if (inGame && terr) carve(+m.x, +m.y, clamp(+m.r, 4, 30)); break;
@@ -2416,12 +2441,17 @@ function drawProjectile(p, t) {
     ctx.rotate(Math.atan2(p.vy, p.vx || 0.001)); ctx.scale(1.1, 1.1);
     HAVA.bomba(ctx);
   } else if (p.type === 'lasso') {
-    // İp: atanın elinden ilmiğe dümdüz uzanır
+    // İp: atanın elinden ilmiğe uzanır. Atılırken kırbaç gibi dalgalanıp gerilir; sandığı çekerken gergin durur
     if (active) {
-      ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(active.x - p.x, active.y - AIM_Y - p.y); ctx.stroke();
+      if (p._t0 === undefined) p._t0 = t;
+      const age = t - p._t0, amp = p.grounded ? 0 : Math.max(0, 11 - age * 34);
+      const hx = active.x - p.x, hy = active.y - AIM_Y - p.y, L = Math.hypot(hx, hy) || 1, nx = -hy / L, ny = hx / L;
+      ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 1.7; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(0, 0);
+      for (let i = 1; i <= 24; i++) { const s = i / 24, w = Math.sin(s * Math.PI * 3 - age * 32) * amp * Math.sin(s * Math.PI); ctx.lineTo(hx * s + nx * w, hy * s + ny * w); }
+      ctx.stroke();
     }
-    ctx.rotate(Math.atan2(p.vy, p.vx)); HAVA.ilmik(ctx);
+    ctx.rotate(Math.atan2(p.grounded ? -p.vy : p.vy, p.grounded ? -p.vx : p.vx)); HAVA.ilmik(ctx);
   }
   ctx.restore();
 }
