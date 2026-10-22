@@ -1032,8 +1032,34 @@ function buryGoldCrates() {
 }
 
 // Bütün sandıklar soru işaretli; içinden ne çıkacağı ancak alınınca belli olur
+// Bir noktadaki toprak ana araziye bağlı mı: topraktan toprağa ilerleyerek su seviyesine inilebiliyorsa bağlıdır.
+// Havada asılı adacıklarda su seviyesine ulaşılamaz. Aşağı yön önce denendiği için ana arazide çok hızlı biter.
+function groundConnected(x, y) {
+  x |= 0; y |= 0;
+  if (!isSolid(x, y)) return false;
+  const seen = new Uint8Array(W * H), stack = [x, y];
+  seen[y * W + x] = 1;
+  for (let n = 0; stack.length && n < 400000; n++) {
+    const cy = stack.pop(), cx = stack.pop();
+    if (cy >= WATER - 2) return true;
+    for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) {   // son eklenen (aşağı) ilk denenir
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+      const k = ny * W + nx;
+      if (seen[k] || !isSolid(nx, ny)) continue;
+      seen[k] = 1; stack.push(nx, ny);
+    }
+  }
+  return false;
+}
 function spawnCrate() {
-  crates.push({ id: ++pid, x: 90 + rng() * (W - 180), y: 6, vy: 0, para: true, k: 0 });
+  // Sandık havada asılı adacıklara inmesin: inilecek nokta ana araziye bağlı olmalı
+  let x = 90 + rng() * (W - 180);
+  for (let tries = 0; tries < 30; tries++) {
+    const cx = 90 + rng() * (W - 180), top = surfaceY(cx);
+    if (top !== null && top < WATER - 30 && groundConnected(cx, top + 2)) { x = cx; break; }
+  }
+  crates.push({ id: ++pid, x, y: 6, vy: 0, para: true, k: 0 });
   toastAll('Gökten sürpriz sandık düşüyor!');
 }
 function stepCrates() {
@@ -3134,7 +3160,7 @@ if (new URLSearchParams(location.search).has('test')) window.__t = {
   get state() { return state; }, get teams() { return teams; }, get units() { return units; }, get active() { return active; },
   get portals() { return portals; }, set portals(v) { portals = v; }, get crates() { return crates; }, get projs() { return projs; }, get moveLeft() { return moveLeft; },
   get cam() { return cam; }, get mode() { return mode; }, get digLeft() { return digLeft; }, get bubbles() { return bubbles; }, explode, get W() { return W; }, WI, collect,
-  get airTarget() { return airTarget; }, set airTarget(v) { airTarget = v; }, get settleAll() { return settleAll; }, get camHold() { return camHold; }, isSolid,
+  get airTarget() { return airTarget; }, set airTarget(v) { airTarget = v; }, get settleAll() { return settleAll; }, get camHold() { return camHold; }, isSolid, groundConnected,
   spawnCrate, surfaceY, setTimer(v) { timer = v; },
 };
 
