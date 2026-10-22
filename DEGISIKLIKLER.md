@@ -22,3 +22,10 @@ Bu klasör oyunun tam ve güncel hâlidir. Orijinal projenin üstüne aşağıda
 - Diğer üç harita teması: Aşırı İşlenmiş Mutfak, Oyuncak Kutusu, Elektronik Çöplüğü (+ lobide harita seçimi ve küçük resimler).
 - Sesler (13 efekt + lobi müziği; şu an kodla üretiliyor).
 - Kürek, sadece sandıktan çıktığı için maç içinde canlı test edilmedi.
+
+## 2026-10-22 eklemeleri
+
+- **Gömülü altın sandık:** Her haritada toprağın 120-180 px altında, etrafı tamamen toprak iki oyuk (`buryGoldCrates`, tohumdan üretilir). İçindeki altın sandık (`k: 1`) "Hele İki Gözüm" verir. Kementle alınamaz; kazarak ya da patlatarak ulaşılır.
+- **Hele İki Gözüm (`airstrike`):** Haritaya dokunarak hedef seçilir, BOMBALA ile `assets/sounds/hele-iki-gozum.mp3` çalar; F-16 (`HAVA.f16`) ~2,6 sn'de hedefin üstünden geçip 5 bomba bırakır, tam isabette 99 hasar.
+- **Kement (`lasso`):** Sürpriz sandıktan çıkar, tek kullanımlık. İp yerçekimsiz ve dümdüz gider, değdiği sandığı alır; turu bitirmez.
+- **Kamera:** Atış yapılan turda tur sonunda kamera son vuruş yerinde 3 sn bekler (`SETTLE_SHOT`).

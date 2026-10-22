@@ -378,15 +378,21 @@ const WEAPONS = [
   { id: 'goat', name: 'Deli Ördek', desc: 'Kurmalı banyo ördeği: paytak paytak yürür, zıplar. Tekrar ATEŞ ile patlat' },
   { id: 'portal', name: 'Portal Tabancası', desc: 'İki atışla iki portal aç. Güçlü atış daha uzağa gider' },
   { id: 'shovel', name: 'Kürek', desc: 'Sandıktan çıkar. Oklarla nişan yönüne tünel kaz' },
+  { id: 'lasso', name: 'Kement', desc: 'Sandıktan çıkar, tek kullanımlık. Dümdüz giden iple uzaktaki sandığı çeker' },
+  { id: 'airstrike', name: 'Hele İki Gözüm', desc: 'Gömülü altın sandıktan çıkar. Haritada hedefe dokun, F-16 bombalasın (99 hasar)' },
 ];
 const WI = id => WEAPONS.findIndex(w => w.id === id);
-const START_AMMO = WEAPONS.map(w => ({ cluster: 2, goat: 1, portal: 1, shovel: 0 })[w.id] ?? -1);   // -1 = sınırsız
+const START_AMMO = WEAPONS.map(w => ({ cluster: 2, goat: 1, portal: 1, shovel: 0, lasso: 0, airstrike: 0 })[w.id] ?? -1);   // -1 = sınırsız
+const LASSO_V = 900, LASSO_MAX = 650;                // kement: yerçekimsiz, dümdüz gider
+const JET_V = 420, JET_Y = 70, JET_LEAD = 2.6;       // F-16 hedefin üstüne ~2,6 sn'de gelir (ses 5 sn)
+const ABOMB_N = 5, ABOMB_GAP = 34, ABOMB_DMG = 99, ABOMB_R = 44;
+const SETTLE_SHOT = 3;                               // atıştan sonra kamera vuruş yerinde bu kadar bekler (sn)
 const CRATE_WEAPONS = [WI('cluster'), WI('goat'), WI('portal')];
 const PUNCH_DMG = 10, PUNCH_REACH = 34;
 const DIG_MAX = MOVE_MAX * 2, DIG_R = 18;           // kürek: yürüme hakkının 2 katı tünel
 const PORTAL_COLORS = ['#3ec5ff', '#ff9a3c'];
 const WORM_NAMES = ['Paşa', 'Kömür', 'Fındık', 'Tospik', 'Zeytin', 'Pamuk', 'Leblebi', 'Haydut', 'Sucuk', 'Pırasa', 'Boncuk', 'Lokum', 'Turşu', 'Kaju', 'Simit', 'Mantı'];
-const ID_PREFIX = 'gasmerler-v8-';
+const ID_PREFIX = 'gasmerler-v9-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 // Tohumlu rastgelelik: arazi tohumdan üretilir, böylece her telefon aynı haritayı kendisi çizer
@@ -404,6 +410,7 @@ let wind = 0, timer = TURN_TIME, state = 'menu', turnTeam = 0, active = null, wi
 let overview = false, shake = 0, settleT = 0, walkAcc = 0, bannerTimer = 0, toastTimer = 0, pid = 0, carveLog = [];
 let moveLeft = MOVE_MAX, portalPending = 0, portalReturn = false, ffTurn = 0, gameMode = 'ffa', sidePtr = [-1, -1];
 let digLeft = DIG_MAX, digging = false, digAcc = 0, digMark = 0, bubbles = [];
+let airTarget = null, shotThisTurn = false, settleAll = 0, camHold = null;
 const cam = { x: W / 2, y: H / 2, z: 1, user: 1, free: false };
 const input = { left: false, right: false, up: false, down: false, charging: false, power: 0 };
 const config = { teams: 2, size: 3, names: TEAM_COLORS.map(t => t.name) };
@@ -436,9 +443,35 @@ const Sound = (() => {
       mus = ac.createGain(); mus.gain.value = 0; mus.connect(master);
       noise = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
       const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      for (const k in sampleRaw) decodeSample(k);
     }
     if (ac.state !== 'running') ac.resume().catch(() => {});
     if (musicWanted) startMusic();
+  }
+  // Dosyadan çalınan sesler: sayfa açılınca indirilir, ses motoru açılınca çözülür
+  const SAMPLES = { helegoz: 'assets/sounds/hele-iki-gozum.mp3' }, sampleRaw = {}, sampleBuf = {};
+  for (const k in SAMPLES) fetch(SAMPLES[k]).then(r => r.ok ? r.arrayBuffer() : null).then(b => { if (b) { sampleRaw[k] = b; if (ac) decodeSample(k); } }).catch(() => {});
+  function decodeSample(k) {
+    if (!sampleRaw[k] || sampleBuf[k]) return;
+    const raw = sampleRaw[k]; sampleRaw[k] = null;
+    ac.decodeAudioData(raw.slice(0), b => { sampleBuf[k] = b; }, () => {});
+  }
+  function sample(k, vol = 1) {
+    if (!on) return;
+    if (ac && ac.state === 'running' && sampleBuf[k]) {
+      const s = ac.createBufferSource(), g = ac.createGain(); g.gain.value = vol;
+      s.buffer = sampleBuf[k]; s.connect(g).connect(sfx); s.start(); return;
+    }
+    try { const a = new Audio(SAMPLES[k]); a.volume = Math.min(1, vol); a.play().catch(() => {}); } catch (e) {}   // yedek yol
+  }
+  // F-16 geçişi: uzaktan gelen, hedefin üstünde en yüksek, sonra uzaklaşan jet uğultusu
+  function jet(lead) {
+    if (!ac || ac.state !== 'running' || !on) return;
+    const t = ac.currentTime, s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    s.buffer = noise; s.loop = true; f.type = 'bandpass'; f.Q.value = 0.7;
+    f.frequency.setValueAtTime(260, t); f.frequency.exponentialRampToValueAtTime(1500, t + lead); f.frequency.exponentialRampToValueAtTime(220, t + lead + 2.2);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + lead); g.gain.exponentialRampToValueAtTime(0.0001, t + lead + 2.4);
+    s.connect(f).connect(g).connect(sfx); s.start(t); s.stop(t + lead + 2.5);
   }
   function env(g, t, peak, a, d) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); }
   function osc(type, f0, f1, t, dur, peak, dest) {
@@ -493,7 +526,7 @@ const Sound = (() => {
     }
   }
   return {
-    unlock, play,
+    unlock, play, sample, jet,
     music(want) { musicWanted = want; if (ac) want ? startMusic() : stopMusic(); },
     get on() { return on; },
     toggle() {
@@ -783,6 +816,8 @@ function startGame(opts) {
   genTerrain();
   teams = []; units = []; projs = []; parts = []; pops = []; graves = []; crates = []; portals = []; bubbles = []; carveLog = []; pid = 0;
   active = null; winnerIdx = -1; portalPending = 0; portalReturn = false; ffTurn = 0; moveLeft = MOVE_MAX;
+  airTarget = null; shotThisTurn = false; camHold = null;
+  for (const g of buryGoldCrates()) crates.push({ id: ++pid, x: g.x, y: g.y, vy: 0, para: false, k: 1 });
   gameMode = opts.mode === 'team' ? 'team' : 'ffa'; sidePtr = [-1, -1];
   const size = clamp(opts.size | 0, 2, 4), list = opts.teams.slice(0, MAX_PLAYERS), cols = colorsFor(list, gameMode === 'team');
   list.forEach((tt, ti) => {
@@ -838,6 +873,7 @@ function nextTurn() {
   wind = Math.round((rng() * 2 - 1) * 10) / 10;
   timer = TURN_TIME; state = 'aim'; walkAcc = 0; moveLeft = MOVE_MAX; portalPending = 0; portalReturn = false; ffTurn = 0;
   digLeft = DIG_MAX; digging = false; digAcc = 0;
+  shotThisTurn = false; airTarget = null;
   input.charging = false; input.power = 0;
   input.left = input.right = input.up = input.down = false;
   for (const u of units) u.tpCount = 0;
@@ -868,12 +904,12 @@ function pickTeamTurn(skipped) {
 function announceTurn() {
   const t = team(); if (!t) return;
   const mine = mode !== 'local' && myTurn();
-  cam.free = false;
+  cam.free = false; camHold = null;
   showBanner(mine ? 'Sıra sende!' : 'Sıra: ' + t.name, t.c);
   if (mine) { buzz(180); Sound.play('turn'); }
 }
 
-function endTurn() { state = 'settle'; settleT = 0; input.charging = false; input.power = 0; portalPending = 0; portalReturn = false; closeWeaponMenu(); }
+function endTurn() { state = 'settle'; settleT = 0; settleAll = 0; input.charging = false; input.power = 0; portalPending = 0; portalReturn = false; closeWeaponMenu(); }
 
 // side: kazanan taraf (herkes tek modunda kazanan oyuncunun sırası), -1 berabere
 function gameOver(side) {
@@ -967,6 +1003,32 @@ function kill(u) {
 }
 
 // ---- Sandıklar ----
+// Gömülü altın sandık: toprağın derinlerinde, etrafı tamamen toprakla çevrili iki oyuk açılır.
+// Haritanın tohumundan üretilir, böylece her telefonda aynı yerdedir. İçindeki sandık "Hele İki Gözüm" verir.
+function buryGoldCrates() {
+  const out = [], RX = 30, RY = 24;
+  const enclosed = (x, y) => {   // oyuğun çevresindeki halkanın neredeyse tamamı toprak olmalı (mağaraya denk gelmesin)
+    let n = 0;
+    for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; if (isSolid(x + Math.cos(a) * (RX + 22), y + Math.sin(a) * (RY + 22))) n++; }
+    return n >= 23;
+  };
+  for (const [lo, hi] of [[0.18, 0.42], [0.58, 0.82]]) {
+    for (let tries = 0; tries < 40; tries++) {
+      const x = Math.round(W * (lo + rng() * (hi - lo))), top = surfaceY(x);
+      if (top === null) continue;
+      const y = Math.round(top + 120 + rng() * 60);
+      if (y > WATER - RY - 50 || !enclosed(x, y)) continue;
+      carveSolid(x, y, RX, RY);
+      tctx.save(); tctx.globalCompositeOperation = 'source-atop'; tctx.fillStyle = 'rgba(42,22,14,.6)';
+      tctx.beginPath(); tctx.ellipse(x, y, RX + 6, RY + 6, 0, 0, Math.PI * 2); tctx.fill();
+      tctx.globalCompositeOperation = 'destination-out'; tctx.beginPath(); tctx.ellipse(x, y, RX, RY, 0, 0, Math.PI * 2); tctx.fill(); tctx.restore();
+      out.push({ x, y: y + RY - 1 });   // sandık oyuğun tabanında durur
+      break;
+    }
+  }
+  return out;
+}
+
 // Bütün sandıklar soru işaretli; içinden ne çıkacağı ancak alınınca belli olur
 function spawnCrate() {
   crates.push({ id: ++pid, x: 90 + rng() * (W - 180), y: 6, vy: 0, para: true, k: 0 });
@@ -987,9 +1049,17 @@ function stepCrates() {
   crates = crates.filter(c => !c.dead);
 }
 // Sandık içeriği: iyi (can, özel silah, kalkan, kürek) ya da kötü (tuzak bomba, link)
-const CRATE_LOOT = [['hp', 22], ['weapon', 26], ['shield', 14], ['shovel', 14], ['trap', 12], ['link', 12]];
+const CRATE_LOOT = [['hp', 20], ['weapon', 24], ['shield', 13], ['shovel', 13], ['lasso', 10], ['trap', 10], ['link', 10]];
 function collect(c, u) {
   c.dead = true;
+  // Gömülü altın sandık: oyunun en güçlü silahı
+  if (c.k === 1) {
+    u.team.ammo[WI('airstrike')]++;
+    addPop(u.x, u.y - 52, 'HELE İKİ GÖZÜM!', '#ffcb3d');
+    const msg = u.team.name + ' altın sandığı buldu!';
+    showBanner(msg, '#ffcb3d'); emit({ t: 'bn', text: msg, c: '#ffcb3d', s: 'pickup' });
+    Sound.play('pickup'); return;
+  }
   let r = rng() * 100, kind = 'hp';
   for (const [k, w] of CRATE_LOOT) { if ((r -= w) < 0) { kind = k; break; } }
   const a = u.team.ammo, y = u.y - 52;
@@ -1002,6 +1072,7 @@ function collect(c, u) {
   else if (kind === 'weapon') { const k = CRATE_WEAPONS[Math.floor(rng() * CRATE_WEAPONS.length)]; if (a[k] >= 0) a[k]++; addPop(u.x, y, '+1 ' + WEAPONS[k].name, '#ffcb3d'); }
   else if (kind === 'shovel') { a[WI('shovel')] += 5; addPop(u.x, y, '+5 Kürek', '#e9d3a8'); }   // tek sandık 5 turluk kazma hakkı
   else if (kind === 'shield') { u.shield = true; addPop(u.x, y, 'Kalkan', '#8fd3ff'); }
+  else if (kind === 'lasso') { a[WI('lasso')]++; addPop(u.x, y, '+1 Kement', '#e9d3a8'); }
   else {
     const mates = u.team.units.filter(o => o.alive);
     if (mates.length > 1) { for (const o of mates) o.link = true; addPop(u.x, y, 'LİNK!', '#6fe36b'); Sound.play('traitor'); }
@@ -1018,9 +1089,18 @@ function fire(power) {
   const free = w === 'portal' && portalPending;          // portalın ikinci atışı ayrı hak yemez
   if (w === 'shovel') return;
   if (!free) { if (t.ammo[wi] === 0) return; if (t.ammo[wi] > 0) t.ammo[wi]--; }
-  if (w === 'punch') { doPunch(power); state = 'fly'; input.charging = false; input.power = 0; cam.free = false; return; }
+  if (w === 'punch') { doPunch(power); shotThisTurn = true; state = 'fly'; input.charging = false; input.power = 0; cam.free = false; return; }
   const dx = Math.cos(u.aim) * u.facing, dy = Math.sin(u.aim);
   const sx = u.x + dx * 24, sy = u.y - AIM_Y + dy * 24, sp = 120 + power * 880;
+  if (w === 'airstrike') { callAirstrike(); if (t.ammo[wi] === 0) t.weapon = 0; state = 'fly'; shotThisTurn = true; input.charging = false; input.power = 0; cam.free = false; return; }
+  if (w === 'lasso') {
+    // Kement turu bitirmez: ip geri gelince aynı turda atış yapılabilir
+    addProj({ type: 'lasso', x: sx, y: sy, vx: dx * LASSO_V, vy: dy * LASSO_V, ox: sx, oy: sy, age: 0 });
+    portalReturn = true; if (t.ammo[wi] === 0) t.weapon = 0;
+    Sound.play('fire'); emit({ t: 'fi' });
+    state = 'fly'; input.charging = false; input.power = 0; cam.free = false; return;
+  }
+  shotThisTurn = true;
   if (w === 'bazooka') addProj({ type: 'rocket', x: sx, y: sy, vx: dx * sp, vy: dy * sp, wind: true, impact: true, r: 42, dmg: 48, age: 0 });
   else if (w === 'grenade') addProj({ type: 'grenade', x: sx, y: sy, vx: dx * sp, vy: dy * sp, fuse: 3, bounce: 0.5, r: 46, dmg: 50, age: 0 });
   else if (w === 'cluster') addProj({ type: 'cluster', x: sx, y: sy, vx: dx * sp, vy: dy * sp, impact: true, r: 30, dmg: 24, age: 0 });
@@ -1034,6 +1114,39 @@ function fire(power) {
   if (w !== 'portal' && t.ammo[wi] === 0) t.weapon = 0;
   Sound.play('fire'); emit({ t: 'fi' });
   state = 'fly'; input.charging = false; input.power = 0; cam.free = false;
+}
+
+// Hele İki Gözüm: ses çalar, F-16 haritanın uzak kenarından gelir ve hedefin üstünden geçerken 5 bomba bırakır
+function airTargetDefault() { return { x: clamp(active.x + active.facing * 260, 40, W - 40), y: active.y }; }
+function callAirstrike() {
+  const tg = airTarget || airTargetDefault(), tx = clamp(tg.x, 30, W - 30);
+  airTarget = { x: tx, y: tg.y };
+  const dir = tx < W / 2 ? -1 : 1;            // uçak hedefin uzak tarafından gelir, haritayı boydan boya geçer
+  const drops = [];
+  for (let k = 0; k < ABOMB_N; k++) drops.push(tx + (k - (ABOMB_N - 1) / 2) * ABOMB_GAP * dir);
+  addProj({ type: 'jet', x: tx - dir * JET_V * JET_LEAD, y: JET_Y, vx: dir * JET_V, vy: 0, dir, drops, age: 0 });
+  Sound.sample('helegoz'); Sound.jet(JET_LEAD); buzz(60);
+  emit({ t: 'as' });
+}
+function stepJet(p) {
+  p.x += p.vx * DT;
+  while (p.drops.length && (p.drops[0] - p.x) * p.dir <= 0) {
+    const bx = p.drops.shift();
+    addProj({ type: 'abomb', x: bx, y: p.y + 12, vx: 0, vy: 40, impact: true, r: ABOMB_R, dmg: ABOMB_DMG, age: 0.2 });
+  }
+  if (!p.drops.length && (p.dir > 0 ? p.x > W + 260 : p.x < -260)) p.dead = true;
+}
+// Kement: yerçekimsiz, dümdüz gider. Sandığa değerse alır; toprağa çarparsa ya da çok uzağa giderse boşa gider
+function stepLasso(p) {
+  const n = Math.max(1, Math.ceil(LASSO_V * DT / 3));
+  for (let i = 0; i < n; i++) {
+    p.x += p.vx * DT / n; p.y += p.vy * DT / n;
+    const c = crates.find(c => !c.dead && Math.hypot(p.x - c.x, p.y - (c.y - 10)) < 20);
+    if (c) { if (active && active.alive) collect(c, active); p.dead = true; return; }
+    if (isSolid(p.x, p.y) || Math.hypot(p.x - p.ox, p.y - p.oy) > LASSO_MAX || p.x < -50 || p.x > W + 50 || p.y < -400 || p.y > WATER) {
+      addPop(p.x, p.y - 10, 'Iska', '#e9d3a8'); p.dead = true; return;
+    }
+  }
 }
 
 // Yumruk: önündeki en yakın askere vurur. Rakibe her zaman 10 hasar; kendi tarafına hasar yok, sadece fırlatır.
@@ -1129,7 +1242,10 @@ function explode(x, y, r, dmg) {
 }
 
 // Görsel/işitsel efektler: hem host hem client kendi ekranında oynatır
+// Atış sırasında son vuruş yeri: tur bitince kamera burada bekler
+function holdCam(x, y) { if (state === 'fly' || state === 'settle') camHold = { x, y }; }
 function explodeFx(x, y, r) {
+  holdCam(x, y);
   carve(x, y, r);
   shake = Math.min(12, shake + r * 0.18);
   Sound.play('boom', r); buzz(r > 35 ? 70 : 40);
@@ -1150,6 +1266,7 @@ function portalFx(x, y, i) {
 
 function splash(x, y) { splashFx(x, y); emit({ t: 'sp', x: r1(x), y: r1(y) }); }
 function splashFx(x, y) {
+  holdCam(x, y - 40);
   Sound.play('splash');
   for (let i = 0; i < 16; i++) parts.push({ kind: 'water', x: x + (Math.random() - 0.5) * 12, y, vx: (Math.random() - 0.5) * 160, vy: -120 - Math.random() * 220, g: G, size: 2 + Math.random() * 2.5, life: 0.9, max: 0.9 });
 }
@@ -1165,6 +1282,8 @@ function stepProjectile(p) {
   if (p.type === 'goat') { stepGoat(p); return; }
   if (p.type === 'pshot') { stepPortalShot(p); return; }
   if (p.type === 'bhole') { stepBlackHole(p); return; }
+  if (p.type === 'jet') { stepJet(p); return; }
+  if (p.type === 'lasso') { stepLasso(p); return; }
   if (!p.resting) {
     if (p.wind) p.vx += wind * WIND_ACC * DT;
     p.vy += G * DT;
@@ -1287,12 +1406,13 @@ function step() {
   if (state === 'settle') {
     const still = projs.length === 0 && units.every(u => !u.alive || u.grounded);
     if (!still) { settleT = Math.min(settleT, 0); return; }
-    settleT += DT;
+    settleT += DT; settleAll += DT;
     if (settleT > 0.7) {
       if (ffTurn > 0) { punishTraitor(); return; }
       const dying = units.find(u => u.alive && u.hp <= 0);
       if (dying) { kill(dying); settleT = 0; }
-      else nextTurn();
+      // Atış yapıldıysa kamera vuruş yerinde 3 sn bekler, ne olduğu görülsün
+      else if (settleAll >= (shotThisTurn ? SETTLE_SHOT : 0.7)) nextTurn();
     }
   }
 }
@@ -1432,7 +1552,7 @@ function snapshot() {
     ch: input.charging ? 1 : 0, pw: r2(input.power), ml: moveLeft, pp: portalPending,
     wp: teams.map(t => t.weapon), am: teams.map(t => t.ammo),
     u: units.map(u => [r1(u.x), r1(u.y), u.hp, u.alive ? 1 : 0, u.facing, r2(u.aim), u.traitor ? 1 : 0, u.link ? 1 : 0]),
-    dl: digLeft, dg: digging ? 1 : 0,
+    dl: digLeft, dg: digging ? 1 : 0, at: airTarget ? [r1(airTarget.x), r1(airTarget.y)] : 0, sw: shotThisTurn ? 1 : 0,
     p: projs.map(p => [p.id, p.type, r1(p.x), r1(p.y), r1(p.vx), r1(p.vy), p.fuse !== undefined ? r2(p.fuse) : -1, p.type === 'pshot' ? p.slot : (p.dir || 0), p.grounded ? 1 : 0]),
     g: graves.map(g => [r1(g.x), r1(g.y), g.ti]),
     c: crates.map(c => [c.id, r1(c.x), r1(c.y), c.k, c.para ? 1 : 0]),
@@ -1505,6 +1625,7 @@ function onClientData(m) {
     case 'bo': if (inGame) bounceFx(); break;
     case 'fi': if (inGame) Sound.play('fire'); break;
     case 'pk': if (inGame) Sound.play('pickup'); break;
+    case 'as': if (inGame) { Sound.sample('helegoz'); Sound.jet(JET_LEAD); buzz(60); } break;
     case 'sh': if (inGame) { bubbles.push({ i: m.i | 0, t: 0 }); Sound.play('shield'); buzz(40); } break;
     case 'pu': if (inGame && units[m.i | 0]) { units[m.i | 0].punchT = 0.3; Sound.play(m.h ? 'punch' : 'fire'); if (m.h) { shake = Math.min(12, shake + 4); buzz(35); } } break;
     case 'dg': if (inGame && terr) carve(+m.x, +m.y, clamp(+m.r, 4, 30)); break;
@@ -1524,7 +1645,9 @@ function onClientData(m) {
 function applySnap(s) {
   if (state === 'over') return;
   state = s.st; turnTeam = s.tt | 0; active = units[s.ai] || null;
-  digLeft = +s.dl || 0; digging = !!s.dg;
+  digLeft = +s.dl || 0; digging = !!s.dg; shotThisTurn = !!s.sw;
+  // Hedefi kendisi işaretleyen oyuncunun ekranında, hostun bir önceki değeri hedefi geri çekmesin
+  if (performance.now() >= aimHoldUntil || !myTurn()) airTarget = Array.isArray(s.at) ? { x: +s.at[0], y: +s.at[1] } : null;
   timer = +s.tm; wind = +s.w; input.charging = !!s.ch; input.power = +s.pw; moveLeft = +s.ml || 0; portalPending = s.pp | 0;
   (s.wp || []).forEach((w, i) => { if (teams[i]) teams[i].weapon = clamp(w | 0, 0, WEAPONS.length - 1); });
   (s.am || []).forEach((a, i) => { if (teams[i] && Array.isArray(a)) teams[i].ammo = a.slice(0, WEAPONS.length).map(v => v | 0); });
@@ -1601,7 +1724,12 @@ function applyAct(m) {
     case 'fp': firePress(); break;
     case 'fr': fireRelease(); break;
     case 'j': jump(); break;
-    case 'w': selectWeapon(m.i | 0); break;  }
+    case 'w': selectWeapon(m.i | 0); break;
+    case 'tg':   // Hele İki Gözüm hedefi
+      if (state === 'aim' && team() && WEAPONS[team().weapon].id === 'airstrike' && Number.isFinite(m.x) && Number.isFinite(m.y))
+        airTarget = { x: clamp(m.x, 30, W - 30), y: clamp(m.y, 0, H) };
+      break;
+  }
 }
 
 // ---- Kamera ----
@@ -1616,8 +1744,12 @@ function updateCam() {
   hadProj = projs.length > 0;
   if (!cam.free) {
     let tx = cam.x, ty = cam.y;
+    // Uçak bomba bırakana kadar hedefi göster; sonra bombaları takip et
+    const fp = projs.find(p => p.type !== 'jet') || projs[0];
     if (overview) { tx = W / 2; ty = H / 2 + 30; }
-    else if (projs.length) { tx = projs[0].x; ty = projs[0].y; }
+    else if (fp && fp.type === 'jet' && airTarget) { tx = airTarget.x; ty = (surfaceY(airTarget.x) ?? H / 2) - 90; }
+    else if (fp) { tx = fp.x; ty = fp.y; }
+    else if (state === 'settle' && camHold) { tx = camHold.x; ty = camHold.y; }
     else if (active) { tx = active.x; ty = active.y - 50; }
     cam.x += (tx - cam.x) * 0.12; cam.y += (ty - cam.y) * 0.12;
   }
@@ -1878,6 +2010,76 @@ const HURDA = (() => {
   return { konserve, kavanoz, kapak, ordek, portal, eldiven, kurek, KAPAK };
 })();
 
+/* Hava desteği ve yardımcılar: F-16 (yandan), uçak bombası, telsiz, kement, gömülü altın sandık.
+   Hurda silahlarla aynı stil: düz renk, kalın siyah çizgi, dünya pikseli. */
+const HAVA = (() => {
+  const K = '#060303';
+  const poly = (ctx, pts) => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); };
+  const boya = (ctx, fill, lw = 1.4) => { ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = K; ctx.lineWidth = lw; ctx.lineJoin = 'round'; ctx.stroke(); };
+  // F-16, yandan: burun +x yönünde, gövde ekseni orijinde (~116 px boy)
+  function f16(ctx) {
+    const L = 16 + Math.random() * 9;                                                     // art yakıcı
+    ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.moveTo(-53, -4); ctx.lineTo(-53 - L, 0); ctx.lineTo(-53, 4); ctx.fill();
+    ctx.fillStyle = '#fff1b8'; ctx.beginPath(); ctx.moveTo(-53, -2); ctx.lineTo(-53 - L * 0.55, 0); ctx.lineTo(-53, 2); ctx.fill();
+    poly(ctx, [[-28, -6], [-41, -31], [-51, -31], [-50, -6]]); boya(ctx, '#7d8792');       // dikey kuyruk
+    ctx.beginPath(); ctx.rect(-49, -27, 7, 5); boya(ctx, '#d23b2b', 0.9);                  // kuyruk bayrağı
+    ctx.fillStyle = '#f4f1e6'; ctx.beginPath(); ctx.arc(-46, -24.5, 1.4, 0, Math.PI * 2); ctx.fill();
+    poly(ctx, [[-38, 2], [-57, 0], [-59, 5], [-44, 5]]); boya(ctx, '#7d8792');             // yatay kuyruk
+    ctx.beginPath(); ctx.moveTo(60, 1); ctx.quadraticCurveTo(46, -6, 30, -7); ctx.lineTo(-48, -7); ctx.lineTo(-53, -4);
+    ctx.lineTo(-53, 4); ctx.lineTo(-40, 6); ctx.lineTo(10, 7); ctx.quadraticCurveTo(42, 7, 60, 1); boya(ctx, '#9aa4ae');   // gövde
+    ctx.beginPath(); ctx.moveTo(60, 1); ctx.quadraticCurveTo(54, -3, 48, -4); ctx.lineTo(48, 5); ctx.quadraticCurveTo(55, 4, 60, 1); boya(ctx, '#5b636b', 1);   // burun konisi
+    poly(ctx, [[6, 6], [25, 6], [22, 12], [9, 12]]); boya(ctx, '#6b747d');                 // gövde altı hava girişi
+    poly(ctx, [[18, 3], [-26, 3], [-35, 8], [-6, 8]]); boya(ctx, '#7d8792');               // kanat
+    ctx.beginPath(); ctx.rect(-14, 8.5, 22, 2.6); boya(ctx, '#f4f1e6', 0.8);               // kanat altı füze
+    ctx.fillStyle = '#d23b2b'; ctx.fillRect(7, 8.5, 2.5, 2.6);
+    ctx.beginPath(); ctx.ellipse(31, -7.5, 13, 5.2, 0, Math.PI, 0); ctx.closePath(); boya(ctx, '#2d5f93');   // damla kokpit
+    ctx.strokeStyle = 'rgba(255,255,255,.65)'; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(24, -10.5); ctx.quadraticCurveTo(30, -12.2, 36, -10.8); ctx.stroke();
+    for (const [r, c] of [[4.6, '#d23b2b'], [3, '#f4f1e6'], [1.5, '#d23b2b']]) { ctx.beginPath(); ctx.arc(-12, -0.5, r, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill(); }   // arma
+    ctx.beginPath(); ctx.arc(-12, -0.5, 4.6, 0, Math.PI * 2); ctx.strokeStyle = K; ctx.lineWidth = 0.9; ctx.stroke();
+  }
+  // Uçak bombası: burun +x
+  function bomba(ctx) {
+    poly(ctx, [[-9, 0], [-14, -5], [-14, 5]]); boya(ctx, '#4a5236', 1);
+    ctx.beginPath(); ctx.ellipse(0, 0, 10, 4.4, 0, 0, Math.PI * 2); boya(ctx, '#5f6b3e', 1.2);
+    ctx.beginPath(); ctx.rect(-2, -4.4, 2, 8.8); ctx.fillStyle = '#ffcb3d'; ctx.fill();
+  }
+  // Elde telsiz: hava desteği çağırmak için; alt-orta orijinde
+  function telsiz(ctx, t) {
+    ctx.beginPath(); ctx.moveTo(2, -9); ctx.lineTo(3.5, -17); ctx.strokeStyle = K; ctx.lineWidth = 1.2; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.beginPath(); ctx.rect(-3.5, -10, 7, 12); boya(ctx, '#3b3f45', 1.1);
+    ctx.beginPath(); ctx.rect(-2.2, -8.4, 4.4, 3.4); boya(ctx, '#8fe36b', 0.7);
+    ctx.fillStyle = Math.floor(t * 4) % 2 ? '#ff4d5e' : '#7a1d26'; ctx.beginPath(); ctx.arc(0, -2, 1.2, 0, Math.PI * 2); ctx.fill();
+  }
+  // Elde sarılı kement
+  function kementSarili(ctx) {
+    ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 1.8;
+    for (const r of [5.5, 4.2]) { ctx.beginPath(); ctx.ellipse(0, -5, r, r * 0.8, 0, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(5, -3); ctx.quadraticCurveTo(9, 1, 7, 4); ctx.stroke();
+  }
+  // Kement ilmiği: ipin ucunda
+  function ilmik(ctx) {
+    ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(2, 0, 6.5, 4.4, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+  // Gömülü altın sandık: tabanı orijinde, nabız gibi parlar
+  function altinSandik(ctx, t) {
+    const p = 0.6 + 0.4 * Math.sin(t * 3);
+    ctx.save(); ctx.shadowColor = '#ffd95a'; ctx.shadowBlur = 8 + 8 * p;
+    ctx.beginPath(); ctx.rect(-12, -14, 24, 14); boya(ctx, '#f2c230');
+    ctx.restore();
+    ctx.beginPath(); ctx.rect(-12, -14, 24, 14); ctx.strokeStyle = K; ctx.lineWidth = 1.4; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-12, -14); ctx.quadraticCurveTo(0, -24, 12, -14); ctx.closePath(); boya(ctx, '#ffd95a');   // kapak
+    ctx.fillStyle = '#b8860b'; ctx.fillRect(-8, -13.2, 3, 12.6); ctx.fillRect(5, -13.2, 3, 12.6);                         // kuşaklar
+    ctx.beginPath(); ctx.rect(-2.2, -11, 4.4, 5); boya(ctx, '#8a5a1a', 0.9);                                                 // kilit
+    ctx.fillStyle = `rgba(255,248,210,${p})`;
+    for (const [x, y, s] of [[-15, -20, 2.2], [14, -22, 1.8], [10, -27, 1.4]]) {
+      ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, r = i % 2 ? s * 0.35 : s * p * 1.3; ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } ctx.closePath(); ctx.fill();
+    }
+  }
+  return { f16, bomba, telsiz, kementSarili, ilmik, altinSandik };
+})();
+
 // Lilita One yazı tipinde "İ" harfi diğer harflerle uyumsuz çiziliyor: "I" yazıp noktasını biz koyuyoruz
 function trText(ctx, text, x, y, mode) {
   text = String(text);
@@ -2102,6 +2304,10 @@ function drawUnit(u, isActive, t) {
       ctx.save(); onunde(11); HURDA.kavanoz(ctx); ctx.restore();
     } else if (aiming && wid === 'goat') {
       ctx.save(); onunde(12); ctx.translate(0, 8); ctx.scale(f * 0.85, 0.85); HURDA.ordek(ctx, t, false, false); ctx.restore();
+    } else if (aiming && wid === 'lasso') {
+      ctx.save(); onunde(11); ctx.translate(0, 6); ctx.scale(f, 1); HAVA.kementSarili(ctx); ctx.restore();
+    } else if (aiming && wid === 'airstrike') {
+      ctx.save(); onunde(10); ctx.translate(0, 7); HAVA.telsiz(ctx, t); ctx.restore();
     } else if (aiming) {
       ctx.save(); ctx.translate(0, -AIM_Y / UNIT_SCALE); ctx.rotate(f > 0 ? u.aim : Math.PI - u.aim);
       ctx.fillStyle = '#2b2533'; ctx.fillRect(2, -2.5, 15, 5);
@@ -2121,7 +2327,7 @@ function drawUnit(u, isActive, t) {
   GASMER.draw(ctx, { x: 0, y: 0.5, boy: UNIT_DRAW_H, renk: tm.c, yon: f, bak: [lx, ly], hain: u.traitor, yuz, ucus: u._ucus });
   silah();
   ctx.restore();
-  if (aiming) {
+  if (aiming && wid !== 'airstrike') {   // hava desteğinde nişangâh yerine haritadaki hedef işareti görünür
     const rd = wid === 'punch' ? PUNCH_REACH + 8 : 80;
     const dx = Math.cos(u.aim) * f, dy = Math.sin(u.aim), cx = u.x + dx * rd, cy = u.y - AIM_Y + dy * rd;
     ctx.strokeStyle = tm.c; ctx.lineWidth = 2;
@@ -2173,7 +2379,34 @@ function drawProjectile(p, t) {
     const d = p.dir < 0 ? -1 : 1;
     ctx.scale(d * 1.1, 1.1);
     HURDA.ordek(ctx, t, p.grounded, p.fuse < 2 && Math.floor(t * 8) % 2 === 1);
+  } else if (p.type === 'jet') {
+    ctx.scale(p.dir < 0 ? -1.15 : 1.15, 1.15);
+    HAVA.f16(ctx);
+  } else if (p.type === 'abomb') {
+    ctx.rotate(Math.atan2(p.vy, p.vx || 0.001)); ctx.scale(1.1, 1.1);
+    HAVA.bomba(ctx);
+  } else if (p.type === 'lasso') {
+    // İp: atanın elinden ilmiğe dümdüz uzanır
+    if (active) {
+      ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(active.x - p.x, active.y - AIM_Y - p.y); ctx.stroke();
+    }
+    ctx.rotate(Math.atan2(p.vy, p.vx)); HAVA.ilmik(ctx);
   }
+  ctx.restore();
+}
+
+// Hele İki Gözüm hedef işareti: gökten yere kırmızı kesik çizgi ve yerde nişangâh
+function drawAirTarget(t) {
+  const wid = team() && WEAPONS[team().weapon] ? WEAPONS[team().weapon].id : '';
+  const jetOn = projs.some(p => p.type === 'jet');
+  if (!airTarget || !(jetOn || (state === 'aim' && wid === 'airstrike'))) return;
+  const x = airTarget.x, gy = surfaceY(x) ?? WATER, pulse = 1 + Math.sin(t * 6) * 0.12;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(226,70,44,.85)'; ctx.lineWidth = 2; ctx.setLineDash([8, 6]);
+  ctx.beginPath(); ctx.moveTo(x, JET_Y); ctx.lineTo(x, gy); ctx.stroke(); ctx.setLineDash([]);
+  ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, gy - 4, 14 * pulse, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x - 8, gy - 12); ctx.lineTo(x + 8, gy + 4); ctx.moveTo(x + 8, gy - 12); ctx.lineTo(x - 8, gy + 4); ctx.stroke();
   ctx.restore();
 }
 
@@ -2181,7 +2414,8 @@ function drawCrate(c, t) {
   ctx.save(); ctx.translate(c.x, c.y);
   if (c.para) ctx.rotate(Math.sin(t * 2 + c.id) * 0.08);
   if (c.para) OBJE.parasut(ctx, t + c.id);
-  OBJE.sandik(ctx);   // koli bandıyla sarılmış karton kutu, sprey boyalı soru işareti
+  if (c.k === 1) HAVA.altinSandik(ctx, t);   // gömülü altın sandık: Hele İki Gözüm
+  else OBJE.sandik(ctx);   // koli bandıyla sarılmış karton kutu, sprey boyalı soru işareti
   ctx.restore();
 }
 
@@ -2238,7 +2472,7 @@ function drawEdgeMarks(vw, vh) {
     ctx.beginPath(); ctx.moveTo(sz, 0); ctx.lineTo(-sz * 0.8, -sz * 0.8); ctx.lineTo(-sz * 0.35, 0); ctx.lineTo(-sz * 0.8, sz * 0.8); ctx.closePath();
     ctx.stroke(); ctx.fill(); ctx.restore();
   };
-  for (const c of crates) mark(c.x, c.y - 9, '#e9d3a8', false);
+  for (const c of crates) mark(c.x, c.y - 9, c.k === 1 ? '#ffcb3d' : '#e9d3a8', c.k === 1);
   for (const u of units) if (u.alive) mark(u.x, u.y - UNIT_H / 2, u.team.c, u === active);
 }
 
@@ -2254,6 +2488,7 @@ function render(t) {
   ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * (vw / 2 - cam.x * z + sxo), dpr * (vh / 2 - cam.y * z + syo));
   ctx.drawImage(terr, 0, 0);
   for (const P of portals) drawPortal(P, t);
+  drawAirTarget(t);
   for (const g of graves) {
     ctx.save(); ctx.translate(g.x, g.y); ctx.scale(1.3, 1.3);
     ctx.fillStyle = '#b9b2c4'; ctx.strokeStyle = '#4b4458'; ctx.lineWidth = 1.2;
@@ -2401,8 +2636,8 @@ function updateHud() {
   const wid = WEAPONS[t.weapon].id;
   // Kürekle kazmaya başladıktan sonra ATEŞ açılır: basınca önceki silahla atış yapılır
   const shovelIdle = wid === 'shovel' && !digging;
-  $('fireLbl').textContent = goat ? 'PATLAT' : shovelIdle ? 'KÜREK' : ({ portal: 'PORTAL', punch: 'VUR' })[wid] || 'ATEŞ';
-  $('fireLbl').classList.toggle('sm', goat || wid === 'portal' || shovelIdle);
+  $('fireLbl').textContent = goat ? 'PATLAT' : shovelIdle ? 'KÜREK' : ({ portal: 'PORTAL', punch: 'VUR', airstrike: 'BOMBALA', lasso: 'KEMENT' })[wid] || 'ATEŞ';
+  $('fireLbl').classList.toggle('sm', goat || wid === 'portal' || shovelIdle || wid === 'airstrike' || wid === 'lasso');
   ateşIkonu();
   $('bFire').setAttribute('aria-label', $('fireLbl').textContent + ': basılı tut, bırak');
   $('bFire').disabled = !mine || !(state === 'aim' || goat) || shovelIdle;
@@ -2453,7 +2688,7 @@ function firePress() {
   // Kürek ATEŞ ile değil oklarla kullanılır. Kazdıktan sonra ATEŞ'e basılırsa önceki silahla atış yapılır.
   if (wid === 'shovel') { if (!digging) return; endDig(t); return firePress(); }
   if (t.ammo[t.weapon] === 0 && !(wid === 'portal' && portalPending)) { t.weapon = 0; return; }
-  if (wid === 'goat') { fire(0); return; }
+  if (wid === 'goat' || wid === 'airstrike' || wid === 'lasso') { fire(0); return; }   // güç doldurmadan hemen ateşlenir
   input.charging = true; input.power = 0;
 }
 function fireRelease() { if (input.charging && state === 'aim') fire(input.power); }
@@ -2470,6 +2705,7 @@ function selectWeapon(i) {
   const t = team();
   if (weaponLocked(t, i)) return;
   if (WEAPONS[i].id === 'shovel' && WEAPONS[t.weapon].id !== 'shovel') t.prevW = t.weapon;
+  if (WEAPONS[i].id === 'airstrike' && !airTarget) airTarget = airTargetDefault();
   t.weapon = i; closeWeaponMenu();
 }
 
@@ -2479,6 +2715,8 @@ function pickWeapon(i) {
   closeWeaponMenu();
   act('w', { i });
   if (mode === 'client') team().weapon = i;
+  if (WEAPONS[i].id === 'airstrike') toast('Haritada hedefe dokun, sonra BOMBALA');
+  else if (WEAPONS[i].id === 'lasso') toast('Sandığa nişan al ve KEMENT: ip dümdüz gider');
 }
 // ATEŞ düğmesinin içindeki tek mermi ikonu (silaha göre değişmez)
 let ateşIkonDpr = 0;
@@ -2512,6 +2750,8 @@ function silahIkon(id) {
   else if (id === 'goat') at(20, 37, 1.55, 0, () => HURDA.ordek(c, 0.4, false, false));
   else if (id === 'portal') at(5, 22, 1.75, -0.25, () => HURDA.portal(c, PORTAL_COLORS[0]));
   else if (id === 'shovel') at(5, 30, 1.6, -0.55, () => HURDA.kurek(c));
+  else if (id === 'lasso') at(22, 30, 2.4, 0, () => HAVA.kementSarili(c));
+  else if (id === 'airstrike') at(22, 23, 0.33, -0.18, () => HAVA.f16(c));
   return cv;
 }
 function openWeaponMenu() {
@@ -2538,6 +2778,15 @@ function aimAt(e) {
   if (!canAim()) return;
   const r = cv.getBoundingClientRect();
   const [wx, wy] = toWorld(e.clientX - r.left, e.clientY - r.top);
+  // Hele İki Gözüm seçiliyse dokunulan yer bombalama hedefi olur
+  if (team() && WEAPONS[team().weapon].id === 'airstrike') {
+    const x = clamp(wx, 30, W - 30), y = clamp(wy, 0, H);
+    if (mode !== 'client') { act('tg', { x, y }); return; }
+    airTarget = { x, y };
+    const now = performance.now(); aimHoldUntil = now + 400;
+    if (now - lastAimSent >= 45) { lastAimSent = now; act('tg', { x, y }); }
+    return;
+  }
   const dx = wx - active.x, dy = wy - (active.y - AIM_Y);
   if (Math.hypot(dx, dy) < 8) return;
   const f = dx < 0 ? -1 : 1, v = clamp(Math.atan2(dy, Math.abs(dx)), -1.55, 1.55);
@@ -2589,7 +2838,10 @@ function ptrEnd(e) {
   ptrs.delete(e.pointerId);
   if (ptrs.size < 2) { pinch = null; pinching = false; }
   if (ptrs.size === 0) {
-    if (aiming && mode === 'client' && canAim()) act('aim', { f: active.facing, v: active.aim });
+    if (aiming && mode === 'client' && canAim()) {
+      if (team() && WEAPONS[team().weapon].id === 'airstrike') { if (airTarget) act('tg', { x: airTarget.x, y: airTarget.y }); }
+      else act('aim', { f: active.facing, v: active.aim });
+    }
     aiming = false; pan = null;
   }
 }
@@ -2621,7 +2873,7 @@ addEventListener('keydown', e => {
   if (KEYMAP[e.code]) { if (!e.repeat) act('k', { k: KEYMAP[e.code], v: true }); e.preventDefault(); }
   else if (e.code === 'Space') { if (!e.repeat) act('fp'); e.preventDefault(); }
   else if (e.code === 'Enter') act('j');
-  else if (e.code === 'KeyM') toggleMap();  else if (/^Digit[1-7]$/.test(e.code)) pickWeapon(+e.code.slice(5) - 1);
+  else if (e.code === 'KeyM') toggleMap();  else if (/^Digit[1-9]$/.test(e.code)) pickWeapon(+e.code.slice(5) - 1);
 });
 addEventListener('keyup', e => {
   if (KEYMAP[e.code]) act('k', { k: KEYMAP[e.code], v: false });
@@ -2878,6 +3130,7 @@ if (new URLSearchParams(location.search).has('test')) window.__t = {
   get state() { return state; }, get teams() { return teams; }, get units() { return units; }, get active() { return active; },
   get portals() { return portals; }, set portals(v) { portals = v; }, get crates() { return crates; }, get projs() { return projs; }, get moveLeft() { return moveLeft; },
   get cam() { return cam; }, get mode() { return mode; }, get digLeft() { return digLeft; }, get bubbles() { return bubbles; }, explode, get W() { return W; }, WI, collect,
+  get airTarget() { return airTarget; }, set airTarget(v) { airTarget = v; }, get settleAll() { return settleAll; }, get camHold() { return camHold; }, isSolid,
   spawnCrate, surfaceY, setTimer(v) { timer = v; },
 };
 
