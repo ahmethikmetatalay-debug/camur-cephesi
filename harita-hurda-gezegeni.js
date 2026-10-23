@@ -54,17 +54,19 @@ const HARITA_HURDA_PNG = (() => {
 
   // Arazi tuvali: kaynak çözünürlüğünde tutulur (yakınlaşınca keskin kalsın).
   // Döndürülen tctx'e dünya koordinatlarında çizilebilir (patlama oyukları için).
-  function arazi() {
+  function tuval(ad) {
     const k = 1 / OLCEK, cv = document.createElement('canvas');
     cv.width = Math.round(W * k); cv.height = Math.round(H * k);
     const c = cv.getContext('2d');
-    c.drawImage(img.arazi, 0, Math.round(OY * k));
+    c.drawImage(img[ad], 0, Math.round(OY * k));
     c.setTransform(k, 0, 0, k, 0, 0);
-    return { terr: cv, tctx: c };
+    return { cv, c };
   }
+  function arazi() { const t = tuval('arazi'); return { terr: t.cv, tctx: t.c }; }
 
-  // Mağara arka duvarı: arazinin ARKASINA, dünya koordinatlarında çizilir
-  function magara(ctx) { ctx.drawImage(img.magara, 0, OY, W, img.magara.height * OLCEK); }
+  // Mağara arka duvarı: arazinin ARKASINA, dünya koordinatlarında (0,0,W,H) çizilir.
+  // Ayrı tuvaldedir; patlamalar araziyle birlikte bunu da oyar (arkada gökyüzü görünür)
+  function magara() { const t = tuval('magara'); return { mterr: t.cv, mtctx: t.c }; }
 
   // Paralaks şeridi: yatayda aynalanarak döşenir (kenarları birleşmese bile dikiş görünmez)
   function serit(ctx, im, kirp, vw, vh, kam, f, ust) {
