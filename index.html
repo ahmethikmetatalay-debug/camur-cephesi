@@ -18,6 +18,7 @@
 <!-- Lilita One'da Ş ş Ğ ğ yok: bu harfler aynı tarzdaki Baloo 2'den gelir -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@800&text=%C5%9E%C5%9F%C4%9E%C4%9F&display=swap">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="harita-hurda-gezegeni.js"></script>
 <style>
 /* Layout: full-bleed canvas battlefield at dusk; HUD chips float on the safe-area edges, thumb controls in the bottom corners */
 :root{
@@ -137,7 +138,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-
 .txt:focus{border-color:var(--ember)}
 .txt.code{font:24px var(--font-display);letter-spacing:.35em;text-align:center;text-transform:uppercase}
 .seg{display:flex;gap:6px}
-.seg button{flex:1;height:42px;border-radius:12px;background:rgba(255,255,255,.06);border:2px solid transparent;font-weight:800;font-size:16px}
+.seg button{flex:1;min-width:0;height:42px;border-radius:12px;background:rgba(255,255,255,.06);border:2px solid transparent;font-weight:800;font-size:16px}
 .seg button[aria-pressed="true"]{border-color:var(--ember);background:rgba(255,138,61,.16)}
 .seg button:disabled{cursor:default}
 .names{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -291,6 +292,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-
           <div class="seg"><button id="ls2" aria-pressed="false">2</button><button id="ls3" aria-pressed="true">3</button><button id="ls4" aria-pressed="false">4</button></div>
         </div>
         <div class="field">
+          <span class="flabel">Harita</span>
+          <div class="seg"><button id="lhPlastik" aria-pressed="true">Plastik Evrim</button><button id="lhHurda" aria-pressed="false">Hurda Gezegeni</button></div>
+        </div>
+        <div class="field">
           <span class="flabel">Askerlerinin adları</span>
           <div class="names" id="wnames"></div>
         </div>
@@ -308,6 +313,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-
         <div class="field">
           <span class="flabel">Tim başına asker</span>
           <div class="seg"><button id="s2" aria-pressed="false">2</button><button id="s3" aria-pressed="true">3</button><button id="s4" aria-pressed="false">4</button></div>
+        </div>
+        <div class="field">
+          <span class="flabel">Harita</span>
+          <div class="seg"><button id="hPlastik" aria-pressed="true">Plastik Evrim</button><button id="hHurda" aria-pressed="false">Hurda Gezegeni</button></div>
         </div>
         <div class="field">
           <span class="flabel">Tim adları</span>
@@ -392,7 +401,7 @@ const PUNCH_DMG = 10, PUNCH_REACH = 34;
 const DIG_MAX = 180, DIG_R = 18;                    // kürek: bir kullanımda 180 px tünel
 const PORTAL_COLORS = ['#3ec5ff', '#ff9a3c'];
 const WORM_NAMES = ['Paşa', 'Kömür', 'Fındık', 'Tospik', 'Zeytin', 'Pamuk', 'Leblebi', 'Haydut', 'Sucuk', 'Pırasa', 'Boncuk', 'Lokum', 'Turşu', 'Kaju', 'Simit', 'Mantı'];
-const ID_PREFIX = 'gasmerler-v9-';
+const ID_PREFIX = 'gasmerler-v10-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 // Tohumlu rastgelelik: arazi tohumdan üretilir, böylece her telefon aynı haritayı kendisi çizer
@@ -413,11 +422,11 @@ let digLeft = DIG_MAX, digging = false, digAcc = 0, digMark = 0, bubbles = [];
 let airTarget = null, shotThisTurn = false, settleAll = 0, camHold = null;
 const cam = { x: W / 2, y: H / 2, z: 1, user: 1, free: false };
 const input = { left: false, right: false, up: false, down: false, charging: false, power: 0 };
-const config = { teams: 2, size: 3, names: TEAM_COLORS.map(t => t.name) };
+const config = { teams: 2, size: 3, harita: 'plastik', names: TEAM_COLORS.map(t => t.name) };
 
 // ---- Ağ durumu ----
 // 'local': tek telefon. 'host': oyunu yöneten telefon, fizik burada döner. 'client': hamlesini hosta yollar, görüntüyü ondan alır.
-let mode = 'local', peer = null, hostConn = null, mySlot = 0, players = [], lobbySize = 3, lobbyMode = 'ffa', inGame = false, roomCode = '', lastInit = null, nmTimer = 0;
+let mode = 'local', peer = null, hostConn = null, mySlot = 0, players = [], lobbySize = 3, lobbyMode = 'ffa', lobbyHarita = 'plastik', inGame = false, roomCode = '', lastInit = null, nmTimer = 0;
 let joinTimer = 0, pingTimer = 0, wnTimer = 0, joined = false, lastSnapSent = 0, lastSnapAt = 0, lastAimSent = 0, aimHoldUntil = 0, warnedStale = false, fxTick = 0;
 let myWorms = ['', '', '', ''];
 
@@ -550,6 +559,8 @@ function buzz(ms) {
 
 // ---- Harita teması: Plastik Evrim Gezegeni ----
 // Arazi şekli her maç aynı tohumla rastgele üretilir; tema sadece görünümü belirler.
+const HARITALAR = ['plastik', 'hurda'];   // 'plastik': kodla üretilen rastgele harita, 'hurda': Photoshop katmanlı sabit harita
+let aktifHarita = 'plastik', haritaDuvar = false;
 const TEMA = {
   ad: 'Plastik Evrim Gezegeni',
   gok: ['#1e2433', '#4a3f5c', '#c9a25e'],          // gökyüzü: üst, orta, ufuk
@@ -563,11 +574,21 @@ const TEMA = {
   toz: ['#7fd3bf', '#c97a9a', '#e0c36a', '#8fa7c9', '#d9d2c4'], // saçılan parçacıklar
   su: 'rgba(44,68,58,.94)', suCizgi: 'rgba(176,222,150,.65)',
 };
+const TEMA_PLASTIK = { ...TEMA };
 
 // ---- Arazi ----
 function isSolid(x, y) { x |= 0; y |= 0; if (x < 0 || x >= W || y < 0 || y >= H) return false; return solid[y * W + x] === 1; }
 
 function genTerrain() {
+  Object.assign(TEMA, TEMA_PLASTIK); haritaDuvar = false;
+  if (aktifHarita === 'hurda') {
+    solid = new Uint8Array(W * H);
+    HARITA_HURDA_PNG.uret(solid);                       // gömülü maske: her telefonda aynı
+    ({ terr, tctx } = HARITA_HURDA_PNG.arazi());       // tuvale dünya koordinatlarıyla çizilir
+    haritaDuvar = true;
+    Object.assign(TEMA, HARITA_HURDA_PNG.tema);
+    return;
+  }
   solid = new Uint8Array(W * H);
   const p = [rng() * 6.28, rng() * 6.28, rng() * 6.28, rng() * 6.28];
   const heights = new Float32Array(W);
@@ -811,9 +832,19 @@ function myTurn() { if (mode === 'local') return true; const t = team(); return 
 
 // opts: { seed, size, mode: 'ffa'|'team', teams: [{ name, slot, wn, side }] }. Her telefon aynı tohumla aynı haritayı üretir.
 // teams dizisindeki her kayıt bir oyuncudur; side, oyuncunun tarafıdır (herkes tek modunda herkesin tarafı kendisidir).
+// Hurda Gezegeni resimleri henüz yüklenmediyse önce yükle, sonra başlat
+function haritaIleBaslat(opts, sonra) {
+  const go = () => { startGame(opts); if (sonra) sonra(); };
+  if (opts.harita === 'hurda' && !HARITA_HURDA_PNG.hazir) {
+    toast('Harita yükleniyor…');
+    HARITA_HURDA_PNG.yukle().then(go, () => { toast('Hurda Gezegeni yüklenemedi, Plastik Evrim açılıyor'); opts.harita = 'plastik'; go(); });
+  } else go();
+}
+
 function startGame(opts) {
   rng = mulberry32(opts.seed >>> 0);
-  W = opts.teams.length > 4 ? 1900 : 1500;          // 5-6 oyuncuda herkese yer kalsın diye harita genişler
+  aktifHarita = opts.harita === 'hurda' ? 'hurda' : 'plastik';
+  W = aktifHarita === 'hurda' ? HARITA_HURDA_PNG.W : opts.teams.length > 4 ? 1900 : 1500;   // Hurda Gezegeni hep 1900; Plastik Evrim 5-6 oyuncuda genişler
   genTerrain();
   teams = []; units = []; projs = []; parts = []; pops = []; graves = []; crates = []; portals = []; bubbles = []; carveLog = []; pid = 0;
   active = null; winnerIdx = -1; portalPending = 0; portalReturn = false; ffTurn = 0; moveLeft = MOVE_MAX;
@@ -1008,21 +1039,23 @@ function kill(u) {
 // Haritanın tohumundan üretilir, böylece her telefonda aynı yerdedir. İçindeki sandık "Hele İki Gözüm" verir.
 function buryGoldCrates() {
   const out = [], RX = 30, RY = 24;
-  const enclosed = (x, y) => {   // oyuğun çevresindeki halkanın neredeyse tamamı toprak olmalı (mağaraya denk gelmesin)
+  const enclosed = (x, y, min) => {   // oyuğun çevresindeki halkanın neredeyse tamamı toprak olmalı (mağaraya denk gelmesin)
     let n = 0;
     for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; if (isSolid(x + Math.cos(a) * (RX + 22), y + Math.sin(a) * (RY + 22))) n++; }
-    return n >= 23;
+    return n >= min;
   };
-  // Önce haritanın sol ve sağ yarısında ara; bir yarıda yer yoksa haritanın kalanında, diğer sandıktan uzakta ara
-  for (const [lo, hi] of [[0.18, 0.42], [0.58, 0.82], [0.08, 0.92]]) {
+  // Önce haritanın sol ve sağ yarısında ara; bir yarıda yer yoksa haritanın kalanında, diğer sandıktan uzakta ara.
+  // Sabit çizilmiş haritalarda uygun yer az olabilir: son aramada sandıklar birbirine biraz yakın, biraz sığ olabilir
+  // [aralık başı, sonu, sandıklar arası en az mesafe (W oranı), en az derinlik, halkada en az toprak (24'te)]
+  for (const [lo, hi, gap, dmin, ring] of [[0.18, 0.42, 0.25, 110, 23], [0.58, 0.82, 0.25, 110, 23], [0.08, 0.92, 0.25, 110, 23], [0.05, 0.95, 0.12, 80, 22]]) {
     if (out.length >= 2) break;
-    for (let tries = 0; tries < 150; tries++) {
+    for (let tries = 0; tries < 200; tries++) {
       const x = Math.round(W * (lo + rng() * (hi - lo))), top = surfaceY(x);
-      if (top === null || out.some(o => Math.abs(o.x - x) < W * 0.25)) continue;
-      const y = Math.round(top + 110 + rng() * 90);
-      if (y > WATER - RY - 50 || !enclosed(x, y)) continue;
+      if (top === null || out.some(o => Math.abs(o.x - x) < W * gap)) continue;
+      const y = Math.round(top + dmin + rng() * 90);
+      if (y > WATER - RY - 50 || !enclosed(x, y, ring)) continue;
       carveSolid(x, y, RX, RY);
-      tctx.save(); tctx.globalCompositeOperation = 'source-atop'; tctx.fillStyle = 'rgba(42,22,14,.6)';
+      tctx.save(); tctx.globalCompositeOperation = 'source-atop'; tctx.fillStyle = TEMA.oyuk;
       tctx.beginPath(); tctx.ellipse(x, y, RX + 6, RY + 6, 0, 0, Math.PI * 2); tctx.fill();
       tctx.globalCompositeOperation = 'destination-out'; tctx.beginPath(); tctx.ellipse(x, y, RX, RY, 0, 0, Math.PI * 2); tctx.fill(); tctx.restore();
       out.push({ x, y: y + RY - 1 });   // sandık oyuğun tabanında durur
@@ -1497,13 +1530,13 @@ function teamGone(t) {
 }
 function cleanNames(a) { return Array.isArray(a) ? a.slice(0, 4).map(s => String(s || '').trim().slice(0, 12)) : []; }
 
-function lobbyMsg(p) { return { t: 'lobby', players: players.map(x => ({ name: x.name, slot: x.slot, side: x.side ? 1 : 0 })), you: p.slot, size: lobbySize, mode: lobbyMode, code: roomCode }; }
+function lobbyMsg(p) { return { t: 'lobby', players: players.map(x => ({ name: x.name, slot: x.slot, side: x.side ? 1 : 0 })), you: p.slot, size: lobbySize, mode: lobbyMode, harita: lobbyHarita, code: roomCode }; }
 function broadcastLobby() { for (const p of players) send(p.conn, lobbyMsg(p)); }
 
 function hostRoom() {
   if (!window.Peer) { $('homeStatus').textContent = 'Bağlantı kütüphanesi yüklenemedi. İnternetini kontrol edip sayfayı yenile.'; return; }
   goFullscreen(); saveName(); teardown();
-  mode = 'host'; mySlot = 0; inGame = false; lobbySize = 3; lobbyMode = 'ffa';
+  mode = 'host'; mySlot = 0; inGame = false; lobbySize = 3; lobbyMode = 'ffa'; lobbyHarita = 'plastik';
   players = [{ name: myName() || 'Oyuncu 1', slot: 0, conn: null, wn: myWorms.slice(), side: 0 }];
   showView('vLobby'); renderLobby();
   openHostPeer();
@@ -1588,9 +1621,9 @@ function hostStart() {
   goFullscreen();
   inGame = true;
   players[0].wn = myWorms.slice();
-  lastInit = { seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0, mode: lobbyMode, teams: players.map(p => ({ name: p.name, slot: p.slot, wn: p.wn || [], side: p.side ? 1 : 0 })), size: lobbySize };
+  lastInit = { seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0, mode: lobbyMode, harita: lobbyHarita, teams: players.map(p => ({ name: p.name, slot: p.slot, wn: p.wn || [], side: p.side ? 1 : 0 })), size: lobbySize };
   for (const p of players) send(p.conn, { t: 'init', ...lastInit, carves: [], you: p.slot });
-  startGame(lastInit);
+  haritaIleBaslat(lastInit);
 }
 
 function backToLobby() {
@@ -1659,7 +1692,8 @@ function onClientData(m) {
   switch (m.t) {
     case 'lobby':
       players = Array.isArray(m.players) ? m.players.slice(0, MAX_PLAYERS).map(p => ({ name: String(p.name).slice(0, 14), slot: p.slot | 0, side: p.side ? 1 : 0 })) : [];
-      mySlot = m.you | 0; lobbySize = clamp(m.size | 0, 2, 4); lobbyMode = m.mode === 'team' ? 'team' : 'ffa'; roomCode = String(m.code || roomCode).slice(0, 4); inGame = false;
+      mySlot = m.you | 0; lobbySize = clamp(m.size | 0, 2, 4); lobbyMode = m.mode === 'team' ? 'team' : 'ffa'; lobbyHarita = m.harita === 'hurda' ? 'hurda' : 'plastik'; roomCode = String(m.code || roomCode).slice(0, 4); inGame = false;
+      if (lobbyHarita === 'hurda') HARITA_HURDA_PNG.yukle().catch(() => {});
       $('joinGo').disabled = false;
       if (state !== 'menu') exitToMenuUI();
       showView('vLobby'); renderLobby();
@@ -1669,8 +1703,7 @@ function onClientData(m) {
       if (!Array.isArray(m.teams)) break;
       inGame = true;
       if (m.you !== undefined) mySlot = m.you | 0;
-      startGame(m);
-      for (const c of Array.isArray(m.carves) ? m.carves : []) carve(+c[0], +c[1], +c[2]);
+      haritaIleBaslat(m, () => { for (const c of Array.isArray(m.carves) ? m.carves : []) carve(+c[0], +c[1], +c[2]); });
       break;
     case 's': if (inGame && teams.length && state !== 'menu') applySnap(m); break;
     case 'turn': if (!teams.length) break; turnTeam = m.tt | 0; closeWeaponMenu(); announceTurn(); break;
@@ -1818,6 +1851,7 @@ function toWorld(sx, sy) { const { vw, vh } = viewSize(); return [(sx - vw / 2) 
 
 // ---- Çizim ----
 function drawBackdrop(vw, vh, t) {
+  if (aktifHarita === 'hurda') return HARITA_HURDA_PNG.arkaPlan(ctx, vw, vh, cam);
   const g = ctx.createLinearGradient(0, 0, 0, vh);
   g.addColorStop(0, TEMA.gok[0]); g.addColorStop(0.55, TEMA.gok[1]); g.addColorStop(1, TEMA.gok[2]);
   ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
@@ -2500,6 +2534,7 @@ function drawParticles() {
 }
 
 function drawWater(t, x0, x1) {
+  if (aktifHarita === 'hurda') return HARITA_HURDA_PNG.su(ctx, t, x0, x1, WATER);
   const wave = (x, k) => WATER + Math.sin(x * 0.018 + t * 1.4 + k) * 3 + Math.sin(x * 0.043 - t * 0.9) * 1.6;
   ctx.fillStyle = TEMA.su;
   ctx.beginPath(); ctx.moveTo(x0, H + 800);
@@ -2546,7 +2581,8 @@ function render(t) {
   const sxo = (Math.random() - 0.5) * shake, syo = (Math.random() - 0.5) * shake;
   const z = cam.z;
   ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * (vw / 2 - cam.x * z + sxo), dpr * (vh / 2 - cam.y * z + syo));
-  ctx.drawImage(terr, 0, 0);
+  if (haritaDuvar) HARITA_HURDA_PNG.magara(ctx);
+  ctx.drawImage(terr, 0, 0, W, H);
   for (const P of portals) drawPortal(P, t);
   drawAirTarget(t);
   for (const g of graves) {
@@ -2998,6 +3034,8 @@ function renderLobby(msg) {
   $('pCount').textContent = players.length;
   $('lmFfa').setAttribute('aria-pressed', String(!tm)); $('lmTeam').setAttribute('aria-pressed', String(tm));
   $('lmFfa').disabled = $('lmTeam').disabled = !host;
+  $('lhPlastik').setAttribute('aria-pressed', String(lobbyHarita === 'plastik')); $('lhHurda').setAttribute('aria-pressed', String(lobbyHarita === 'hurda'));
+  $('lhPlastik').disabled = $('lhHurda').disabled = !host;
   [2, 3, 4].forEach(n => { const b = $('ls' + n); b.setAttribute('aria-pressed', String(n === lobbySize)); b.disabled = !host; });
   $('lobbyStart').hidden = !host; $('lobbyStart').disabled = players.length < 2 || !roomCode || !sidesReady();
   $('lobbyStatus').textContent = msg || (host
@@ -3086,7 +3124,7 @@ buildNames();
 
 function localStart() {
   goFullscreen(); teardown();
-  startGame({ seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0, teams: config.names.slice(0, config.teams).map(name => ({ name })), size: config.size });
+  haritaIleBaslat({ seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0, harita: config.harita, teams: config.names.slice(0, config.teams).map(name => ({ name })), size: config.size });
 }
 
 const SND_ON = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
@@ -3107,6 +3145,20 @@ $('shareBtn').addEventListener('click', shareInvite);
 $('lobbyStart').addEventListener('click', hostStart);
 $('lmFfa').addEventListener('click', () => setLobbyMode('ffa'));
 $('lmTeam').addEventListener('click', () => setLobbyMode('team'));
+// Harita seçimi: yerelde config.harita, lobide host seçer ve herkese yayınlanır
+function setLocalHarita(hr) {
+  config.harita = hr; $('hPlastik').setAttribute('aria-pressed', String(hr === 'plastik')); $('hHurda').setAttribute('aria-pressed', String(hr === 'hurda'));
+  if (hr === 'hurda') HARITA_HURDA_PNG.yukle().catch(() => {});
+}
+function setLobbyHarita(hr) {
+  if (mode !== 'host') return;
+  lobbyHarita = hr; if (hr === 'hurda') HARITA_HURDA_PNG.yukle().catch(() => {});
+  renderLobby(); broadcastLobby();
+}
+$('hPlastik').addEventListener('click', () => setLocalHarita('plastik'));
+$('hHurda').addEventListener('click', () => setLocalHarita('hurda'));
+$('lhPlastik').addEventListener('click', () => setLobbyHarita('plastik'));
+$('lhHurda').addEventListener('click', () => setLobbyHarita('hurda'));
 $('leaveBtn').addEventListener('click', leaveRoom);
 $('startBtn').addEventListener('click', localStart);
 $('againBtn').addEventListener('click', () => mode === 'host' ? hostStart() : localStart());
@@ -3179,6 +3231,7 @@ if (document.fonts && document.fonts.load) {
   const TR = 'İıŞşĞğÜüÖöÇç HAİN Gaşmerler';
   ['16px "Lilita One"', '800 16px "Baloo 2"', '400 16px Rubik', '600 16px Rubik', '800 16px Rubik'].forEach(f => document.fonts.load(f, TR).catch(() => {}));
 }
+HARITA_HURDA_PNG.yukle().catch(() => {});   // resimler arka planda iner; seçilirse beklemeden açılır
 const invite = new URLSearchParams(location.search).get('oda');
 if (invite) { $('codeIn').value = invite.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4); showView('vJoin'); }
 else showView('vHome');
@@ -3190,7 +3243,7 @@ if (new URLSearchParams(location.search).has('test')) window.__t = {
   get state() { return state; }, get teams() { return teams; }, get units() { return units; }, get active() { return active; },
   get portals() { return portals; }, set portals(v) { portals = v; }, get crates() { return crates; }, get projs() { return projs; }, get moveLeft() { return moveLeft; },
   get cam() { return cam; }, get mode() { return mode; }, get digLeft() { return digLeft; }, get bubbles() { return bubbles; }, explode, get W() { return W; }, WI, collect,
-  get airTarget() { return airTarget; }, set airTarget(v) { airTarget = v; }, get settleAll() { return settleAll; }, get camHold() { return camHold; }, isSolid, groundConnected,
+  get airTarget() { return airTarget; }, set airTarget(v) { airTarget = v; }, get settleAll() { return settleAll; }, get camHold() { return camHold; }, isSolid, groundConnected, get aktifHarita() { return aktifHarita; }, get solidHash() { let h = 0; for (let i = 0; i < solid.length; i += 7) h = (h * 31 + solid[i]) | 0; return h; },
   spawnCrate, surfaceY, setTimer(v) { timer = v; },
 };
 

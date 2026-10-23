@@ -29,3 +29,10 @@ Bu klasör oyunun tam ve güncel hâlidir. Orijinal projenin üstüne aşağıda
 - **Hele İki Gözüm (`airstrike`):** Haritaya dokunarak hedef seçilir, BOMBALA ile `assets/sounds/hele-iki-gozum.mp3` çalar; F-16 (`HAVA.f16`) ~2,6 sn'de hedefin üstünden geçip 5 bomba bırakır, tam isabette 99 hasar.
 - **Kement (`lasso`):** Sürpriz sandıktan çıkar, tek kullanımlık. İp yerçekimsiz ve dümdüz gider, değdiği sandığı alır; turu bitirmez.
 - **Kamera:** Atış yapılan turda tur sonunda kamera son vuruş yerinde 3 sn bekler (`SETTLE_SHOT`).
+
+## 2026-10-23: Hurda Gezegeni haritası
+
+- Elle çizilmiş 6 katmanlı **Hurda Gezegeni** (`harita-hurda-gezegeni.js`, `assets/maps/hurda-gezegeni/`) ikinci harita olarak eklendi. Yerel kurulumda ve lobide "Harita" seçimi var; varsayılan Plastik Evrim. Lobide host seçer, misafirlere yayınlanır.
+- Çarpışma maskesi dosyanın içinde sayı olarak gömülü; her telefonda birebir aynı (testte iki tarayıcıda maske özeti aynı çıktı).
+- Gömülü altın sandıklar bu haritada da oluşur; sabit haritalarda uygun yer az olabildiği için son bir esnek arama eklendi (Hurda'da 20, Plastik'te 30 tohumda hep 2 sandık).
+- Oda öneki `gasmerler-v10-` (lobi ve init mesajı harita bilgisi taşıyor).
