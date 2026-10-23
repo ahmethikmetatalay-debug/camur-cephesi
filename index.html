@@ -40,7 +40,7 @@ html{height:100%;box-sizing:border-box;background:var(--night)}
 body{height:100%;margin:0;background:var(--night);color:var(--paper);font-family:var(--font-body);overflow:hidden;overscroll-behavior:none;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 @supports (height:100dvh){body{height:100dvh}}
 [hidden]{display:none!important}
-#game{position:relative;width:100%;height:100%;overflow:hidden}
+#game{position:fixed;left:0;top:0;width:var(--app-w,100%);height:var(--app-h,100%);overflow:hidden}
 #cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
 button:focus-visible,input:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
@@ -494,6 +494,24 @@ const PUNCH_DMG = 10, PUNCH_REACH = 34;
 const DIG_MAX = 180, DIG_R = 18;                    // kürek: bir kullanımda 180 px tünel
 const PORTAL_COLORS = ['#3ec5ff', '#ff9a3c'];
 const WORM_NAMES = ['Paşa', 'Kömür', 'Fındık', 'Tospik', 'Zeytin', 'Pamuk', 'Leblebi', 'Haydut', 'Sucuk', 'Pırasa', 'Boncuk', 'Lokum', 'Turşu', 'Kaju', 'Simit', 'Mantı'];
+// Oyun alanı gerçekten görünen alana sığdırılır. Bazı Android telefonlar (ör. Galaxy A serisi, tam ekran uygulama)
+// sayfaya ekrandan uzun bir yükseklik bildiriyor; alttaki düğmeler ekran dışında kalıyordu. Görünen alan, pencere,
+// görsel alan ve fiziksel ekranın en küçüğüdür.
+function fitApp() {
+  const vv = window.visualViewport, land = innerWidth > innerHeight;
+  const kisa = Math.min(screen.width, screen.height) || Infinity, uzun = Math.max(screen.width, screen.height) || Infinity;
+  const h = Math.floor(Math.min(innerHeight, vv ? vv.height : Infinity, land ? kisa : uzun));
+  const w = Math.floor(Math.min(innerWidth, vv ? vv.width : Infinity, land ? uzun : kisa));
+  const st = document.documentElement.style;
+  if (st.getPropertyValue('--app-h') !== h + 'px') st.setProperty('--app-h', h + 'px');
+  if (st.getPropertyValue('--app-w') !== w + 'px') st.setProperty('--app-w', w + 'px');
+  if (scrollX || scrollY) scrollTo(0, 0);
+}
+fitApp();
+for (const ev of ['resize', 'orientationchange', 'pageshow', 'focus']) addEventListener(ev, () => { fitApp(); setTimeout(fitApp, 350); });
+if (window.visualViewport) visualViewport.addEventListener('resize', fitApp);
+document.addEventListener('fullscreenchange', () => setTimeout(fitApp, 200));
+setInterval(fitApp, 1000);   // bazı telefonlarda dönüş olayı geç ya da hiç gelmiyor
 const ID_PREFIX = 'gasmerler-v13-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
