@@ -408,7 +408,7 @@ const PUNCH_DMG = 10, PUNCH_REACH = 34;
 const DIG_MAX = 180, DIG_R = 18;                    // kürek: bir kullanımda 180 px tünel
 const PORTAL_COLORS = ['#3ec5ff', '#ff9a3c'];
 const WORM_NAMES = ['Paşa', 'Kömür', 'Fındık', 'Tospik', 'Zeytin', 'Pamuk', 'Leblebi', 'Haydut', 'Sucuk', 'Pırasa', 'Boncuk', 'Lokum', 'Turşu', 'Kaju', 'Simit', 'Mantı'];
-const ID_PREFIX = 'gasmerler-v11-';
+const ID_PREFIX = 'gasmerler-v12-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 // Tohumlu rastgelelik: arazi tohumdan üretilir, böylece her telefon aynı haritayı kendisi çizer
@@ -687,6 +687,16 @@ function carve(cx, cy, r) {
 }
 
 function surfaceY(x) { for (let y = 0; y < H; y++) if (isSolid(x, y)) return y - 1; return null; }
+// Bir sütundaki bütün basılabilir zeminler (üst yüzey + mağara tabanları); üstünde asker boyu kadar boşluk olmalı
+function floorsAt(x) {
+  const out = [];
+  for (let y = 1, free = 0; y < WATER - 40; y++) {
+    if (!isSolid(x, y)) { free++; continue; }
+    if (free > UNIT_H + 6 && !isSolid(x - 6, y - 4) && !isSolid(x + 6, y - 4)) out.push(y - 1);
+    free = 0;
+  }
+  return out;
+}
 
 function normalAt(x, y) {
   let nx = 0, ny = 0;
@@ -853,6 +863,8 @@ function startGame(opts) {
   aktifHarita = opts.harita === 'hurda' ? 'hurda' : 'plastik';
   W = aktifHarita === 'hurda' ? HARITA_HURDA_PNG.W : opts.teams.length > 4 ? 1900 : 1500;   // Hurda Gezegeni hep 1900; Plastik Evrim 5-6 oyuncuda genişler
   genTerrain();
+  mapTop = 0; while (mapTop < WATER - 100 && !solid.subarray(mapTop * W, mapTop * W + W).includes(1)) mapTop++;
+  mapTop -= 40;
   teams = []; units = []; projs = []; parts = []; pops = []; graves = []; crates = []; portals = []; bubbles = []; carveLog = []; pid = 0;
   active = null; winnerIdx = -1; portalPending = 0; portalReturn = false; ffTurn = 0; moveLeft = MOVE_MAX;
   airTarget = null; shotThisTurn = false; camHold = null;
@@ -865,13 +877,14 @@ function startGame(opts) {
   });
   const total = teams.length * size, xs = [];
   for (let tries = 0; xs.length < total && tries < 5000; tries++) {
-    const x = 80 + rng() * (W - 160), y = surfaceY(x);
-    if (y === null || y > WATER - 40 || xs.some(o => Math.abs(o - x) < 70)) continue;
-    xs.push(x);
+    // Hurda Gezegeni'nde mağara tabanlarında da başlanabilir: o sütundaki zeminlerden biri rastgele seçilir
+    const x = 80 + rng() * (W - 160), fl = aktifHarita === 'hurda' ? floorsAt(x) : [surfaceY(x)], y = fl[Math.floor(rng() * fl.length)] ?? null;
+    if (y === null || y > WATER - 40 || xs.some(o => Math.hypot(o.x - x, o.y - y) < 70) || crates.some(c => Math.hypot(c.x - x, c.y - y) < 60)) continue;
+    xs.push({ x, y });
   }
   for (let k = 0; k < total; k++) {
     const ti = k % teams.length, t = teams[ti], idx = t.units.length;
-    const x = xs[k] ?? (100 + k * 70), y = surfaceY(x) ?? 200;
+    const x = xs[k]?.x ?? (100 + k * 70), y = xs[k]?.y ?? surfaceY(x) ?? 200;
     const name = String(t.wn[idx] || '').trim().slice(0, 12) || WORM_NAMES[(ti * 4 + idx) % WORM_NAMES.length];
     const u = { x, y, vx: 0, vy: 0, h: UNIT_H, grounded: true, hp: 100, alive: true, team: t, name, traitor: false, facing: x < W / 2 ? 1 : -1, aim: -0.5, isUnit: true };
     t.units.push(u); units.push(u);
@@ -1047,6 +1060,8 @@ function kill(u) {
 // Gömülü altın sandık: toprağın derinlerinde, etrafı tamamen toprakla çevrili iki oyuk açılır.
 // Haritanın tohumundan üretilir, böylece her telefonda aynı yerdedir. İçindeki sandık "Hele İki Gözüm" verir.
 function buryGoldCrates() {
+  // Hurda Gezegeni: altın sandık büyük kemerin altındaki, sarkıtların arasındaki kuytu rafta durur (haritanın en zor yeri)
+  if (aktifHarita === 'hurda') { let y = 470; while (y < WATER && !isSolid(462, y + 1)) y++; return [{ x: 462, y }]; }
   const out = [], RX = 30, RY = 24;
   const enclosed = (x, y, min) => {   // oyuğun çevresindeki halkanın neredeyse tamamı toprak olmalı (mağaraya denk gelmesin)
     let n = 0;
@@ -1315,7 +1330,7 @@ function endDig(t) {
   if (WEAPONS[t.weapon].id === 'shovel') t.weapon = prev;
 }
 
-// kb: fırlatma çarpanı (bazuka 0,75: vurduğu askeri daha az fırlatır)
+// kb: fırlatma çarpanı (bazuka 0,675, Deli Ördek 0,75: vurduğu askeri daha az fırlatır)
 function explode(x, y, r, dmg, kb = 1) {
   explodeFx(x, y, r);
   if (mode === 'host') carveLog.push([r1(x), r1(y), r]);
@@ -1431,7 +1446,7 @@ function stepPortalShot(p) {
 
 function detonate(p) {
   p.dead = true;
-  explode(p.x, p.y, p.r, p.dmg, p.type === 'rocket' ? 0.75 : 1);
+  explode(p.x, p.y, p.r, p.dmg, p.type === 'rocket' ? 0.675 : 1);
   if (p.type === 'cluster') for (let i = 0; i < 5; i++) {
     addProj({ type: 'frag', x: p.x, y: p.y - 6, vx: (rng() * 2 - 1) * 220, vy: -180 - rng() * 220, impact: true, r: 22, dmg: 20, age: 0.2 });
   }
@@ -1452,7 +1467,7 @@ function stepGoat(g) {
   } else airStep(g, DT);
   teleportProj(g, 7);
   if (g.y > WATER + 4) { splash(g.x, WATER); g.dead = true; return; }
-  if (g.fuse <= 0) { g.dead = true; explode(g.x, g.y - 8, g.r, g.dmg); }
+  if (g.fuse <= 0) { g.dead = true; explode(g.x, g.y - 8, g.r, g.dmg, 0.75); }
 }
 
 // ---- Ana simülasyon adımı (sabit 60 Hz, sadece local ve host'ta) ----
@@ -1830,12 +1845,15 @@ function applyAct(m) {
 }
 
 // ---- Kamera ----
+const OV_PAD = 120;   // harita görünümünde üst + alt düğme şeritleri (px)
+let mapTop = 0;      // en yüksek toprağın 40 px üstü; genTerrain sonunda hesaplanır
 function viewSize() { return { vw: cv.clientWidth, vh: cv.clientHeight }; }
 function baseZoom() { const { vw, vh } = viewSize(); return Math.max(vh / 430, vw / 780); }
 let hadProj = false, pinching = false;
 function updateCam() {
   const { vw, vh } = viewSize();
-  const z = overview ? Math.min(vw / W, vh / (H - 60)) : baseZoom() * cam.user;
+  // Harita görünümü: arazinin tamamı (havadaki adalar ve su dahil) üst/alt düğmelerin arasına sığar
+  const z = overview ? Math.min(vw / W, (vh - OV_PAD) / (WATER + 25 - mapTop)) : baseZoom() * cam.user;
   cam.z += (z - cam.z) * (pinching ? 1 : 0.15);
   if (projs.length && !hadProj) cam.free = false;     // atış yapılınca kamera mermiyi takip etmeye döner
   hadProj = projs.length > 0;
@@ -1843,7 +1861,7 @@ function updateCam() {
     let tx = cam.x, ty = cam.y;
     // Uçak bomba bırakana kadar hedefi göster; sonra bombaları takip et
     const fp = projs.find(p => p.type !== 'jet') || projs[0];
-    if (overview) { tx = W / 2; ty = H / 2 + 30; }
+    if (overview) { tx = W / 2; ty = (mapTop + WATER + 25) / 2 + 8 / cam.z; }
     else if (fp && fp.type === 'jet' && airTarget) { tx = airTarget.x; ty = (surfaceY(airTarget.x) ?? H / 2) - 90; }
     else if (fp) { tx = fp.x; ty = fp.y; }
     else if (state === 'settle' && camHold) { tx = camHold.x; ty = camHold.y; }
@@ -1853,7 +1871,7 @@ function updateCam() {
   const hw = vw / 2 / cam.z, hh = vh / 2 / cam.z;
   cam.x = hw * 2 >= W ? W / 2 : clamp(cam.x, hw, W - hw);
   const yMin = hh - 300, yMax = H - hh + 20;
-  cam.y = yMin > yMax ? (yMin + yMax) / 2 : clamp(cam.y, yMin, yMax);
+  if (!(overview && !cam.free)) cam.y = yMin > yMax ? (yMin + yMax) / 2 : clamp(cam.y, yMin, yMax);
 }
 function toScreen(x, y) { const { vw, vh } = viewSize(); return [(x - cam.x) * cam.z + vw / 2, (y - cam.y) * cam.z + vh / 2]; }
 function toWorld(sx, sy) { const { vw, vh } = viewSize(); return [(sx - vw / 2) / cam.z + cam.x, (sy - vh / 2) / cam.z + cam.y]; }
