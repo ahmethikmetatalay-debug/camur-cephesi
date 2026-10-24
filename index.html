@@ -1359,8 +1359,12 @@ function collect(c, u) {
   else if (kind === 'lasso') { a[WI('lasso')]++; addPop(u.x, y, '+1 Kement', '#e9d3a8'); }
   else {
     const mates = u.team.units.filter(o => o.alive);
-    if (mates.length > 1) { for (const o of mates) o.link = true; addPop(u.x, y, 'LİNK!', '#6fe36b'); Sound.play('traitor'); }
-    else addPop(u.x, y, 'Link (etkisiz)', '#6fe36b');
+    if (mates.length > 1) {
+      for (const o of mates) o.link = true; addPop(u.x, y, 'LİNK!', '#ff4d5e');
+      const msg = 'LİNK! ' + u.team.name + ' askerleri aynı hasarı alacak';
+      showBanner(msg, '#ff4d5e'); emit({ t: 'bn', text: msg, c: '#ff4d5e', s: 'traitor' }); Sound.play('traitor'); buzz(120);   // hain olunca çalan ses
+    }
+    else addPop(u.x, y, 'Link (etkisiz)', '#ff4d5e');
   }
   Sound.play('sandik'); emit({ t: 'pk' });
 }
@@ -2613,15 +2617,30 @@ const OBJE = (() => {
 const UNIT_DRAW_H = 18.5;   // karakterin çizim yüksekliği (yerel birim, UNIT_SCALE ile büyür)
 const AIM_Y = 11;           // silahın ve atışın çıktığı yükseklik: gövde hizası (dünya px)
 
+// Link haresi: karakterin silüeti iki kez büyütülür (halka = dış büyütme − iç büyütme), böylece kırmızı çizgi
+// gövdeden LINK_BOSLUK kadar uzakta durur ve kırmızı takımın panço rengine karışmaz. Yerel (UNIT_SCALE öncesi) birimlerle.
+const LINK_L = 44, LINK_K = 7, LINK_BOSLUK = 1.2, LINK_KALIN = 1.3;
+let linkCv = null;
+function linkHare(gop, t) {
+  if (!linkCv) linkCv = [0, 1].map(() => { const c = document.createElement('canvas'); c.width = c.height = LINK_L * LINK_K; return c; });
+  const [sil, hare] = linkCv, n = LINK_L * LINK_K, sx = sil.getContext('2d'), hx = hare.getContext('2d');
+  sx.setTransform(1, 0, 0, 1, 0, 0); sx.clearRect(0, 0, n, n);
+  sx.setTransform(LINK_K, 0, 0, LINK_K, n / 2, n * 0.74); GASMER.draw(sx, gop);
+  const buyut = (r) => { for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; hx.drawImage(sil, Math.cos(a) * r * LINK_K, Math.sin(a) * r * LINK_K); } };
+  hx.setTransform(1, 0, 0, 1, 0, 0); hx.globalCompositeOperation = 'source-over'; hx.clearRect(0, 0, n, n);
+  buyut(LINK_BOSLUK + LINK_KALIN);
+  hx.globalCompositeOperation = 'source-in'; hx.fillStyle = '#ff2a2a'; hx.fillRect(0, 0, n, n);
+  hx.globalCompositeOperation = 'destination-out'; buyut(LINK_BOSLUK); hx.drawImage(sil, 0, 0);
+  hx.globalCompositeOperation = 'source-over';
+  const nabiz = 0.7 + 0.3 * Math.sin(t * 7);
+  ctx.save(); ctx.globalAlpha = nabiz; ctx.shadowColor = '#ff1a1a'; ctx.shadowBlur = 8 * cam.z;
+  ctx.drawImage(hare, -LINK_L / 2, -LINK_L * 0.74, LINK_L, LINK_L);
+  ctx.restore();
+}
 function drawUnit(u, isActive, t) {
   const tm = u.team, f = u.facing, aiming = isActive && state === 'aim';
   const wid = WEAPONS[tm.weapon] ? WEAPONS[tm.weapon].id : 'bazooka', punching = (u.punchT || 0) > 0;
   ctx.save(); ctx.translate(u.x, u.y); ctx.scale(UNIT_SCALE, UNIT_SCALE);
-  // Link: bağlı askerlerin etrafı yeşil parlar
-  if (u.link) {
-    ctx.save(); ctx.shadowColor = '#6fe36b'; ctx.shadowBlur = 10; ctx.strokeStyle = 'rgba(111,227,107,.9)'; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.ellipse(0, -9.5, 12.5, 12.5, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
-  }
   // Hayatta kalan karakter (GASMER): takım rengi panço ve kapüşon, gözler nişana bakar
   const lx = isActive ? Math.cos(u.aim) * f : f, ly = isActive ? Math.sin(u.aim) : 0;
   // Silah havada, gövde hizasında, karakterin önünde
@@ -2671,7 +2690,9 @@ function drawUnit(u, isActive, t) {
   const vy = u._vy || 0;
   u._ucus = u._ucus ? Math.abs(vy) > 50 : Math.abs(vy) > 110;
   const yuz = t < (u._aci || 0) ? 'aci' : vy > 320 ? 'panik' : undefined;
-  GASMER.draw(ctx, { x: 0, y: 0.5, boy: UNIT_DRAW_H, renk: tm.c, yon: f, bak: [lx, ly], hain: u.traitor, yuz, ucus: u._ucus });
+  const gop = { x: 0, y: 0.5, boy: UNIT_DRAW_H, renk: tm.c, yon: f, bak: [lx, ly], hain: u.traitor, yuz, ucus: u._ucus };
+  if (u.link) linkHare(gop, t);   // link kötü bir şey: karakterin şeklini izleyen, aradan boşluklu kırmızı hare
+  GASMER.draw(ctx, gop);
   silah();
   ctx.restore();
   if (aiming && wid !== 'airstrike') {   // hava desteğinde nişangâh yerine haritadaki hedef işareti görünür
