@@ -595,10 +595,10 @@ const Sound = (() => {
     portalAtes: { u: 'portal-tabancasi-atesleme.mp3', o: 0.49, v: 2.4 },
     portalGec: { u: 'portaldan-gecme.mp3', o: 0.21, v: 2.2 },
     sira: { u: 'sira-sende.mp3', o: 0.17, v: 1.9 },
-    su: { u: 'su.mp3', o: 0.23, v: 1.7 },
+    su: { u: 'su.mp3', o: 0.23, v: 0.85 },
     zipla: { u: 'ziplama.mp3', o: 0.25, v: 1.5 },
     muzik: { u: 'muzik-lobi.mp3', v: 0.45 },
-    ortamHurda: { u: 'harita-ortam-hurda.mp3', v: 0.45, tembel: true },
+    ortamHurda: { u: 'harita-ortam-hurda.mp3', v: 0.225, tembel: true },
     kablo: { u: 'harita-ortam-hurda-kablo-cizirtisi.mp3', v: 1.4, tembel: true, parca: [[0.1, 0.58], [1.42, 2.06], [2.9, 4.04]] },
   };
   const sampleRaw = {}, sampleBuf = {}, istendi = {}, torbalar = {};
@@ -708,7 +708,8 @@ const Sound = (() => {
     switch (name) {
       case 'boom': { const s = clamp(k / 60, 0.3, 1); nz(t, 0.45 + 0.7 * s, 0.9 * s, 'lowpass', 2400, 90); osc('sine', 130, 32, t, 0.5, 0.9 * s); break; }
       case 'fire': nz(t, 0.3, 0.22, 'bandpass', 500, 2600); break;
-      case 'bounce': osc('triangle', 280, 110, t, 0.08, 0.25); break;
+      case 'bounce': osc('triangle', 280, 110, t, 0.1, 0.75); osc('sine', 150, 70, t, 0.09, 0.6); nz(t, 0.05, 0.35, 'bandpass', 2200, 900); break;   // teneke kutu yere çarpar
+      case 'adim': { const f = 0.85 + Math.random() * 0.3; nz(t, 0.07, 0.16, 'lowpass', 900 * f, 220 * f); osc('sine', 95 * f, 55 * f, t, 0.06, 0.13); break; }   // çamurda ayak
       case 'splash': nz(t, 0.55, 0.3, 'bandpass', 1800, 500); break;
       case 'pickup': osc('square', hz(76), 0, t, 0.09, 0.07); osc('square', hz(81), 0, t + 0.08, 0.09, 0.07); osc('square', hz(88), 0, t + 0.16, 0.2, 0.07); break;
       case 'portal': osc('sine', 260, 1500, t, 0.28, 0.22); osc('sine', 520, 2400, t + 0.04, 0.22, 0.08); break;
@@ -3588,6 +3589,16 @@ if (new URLSearchParams(location.search).has('test')) window.__t = {
 
 // ---- Döngü ----
 let last = performance.now(), acc = 0;
+// Yürüme sesi: sıradaki asker yerde sağa sola ilerledikçe adım; host ve misafir kendi ekranında konumdan çıkarır
+let adimX = null, adimY = 0, adimT = 0, adimSon = 0;
+function adimSesi(dt) {
+  const a = active;
+  if (!a || !a.alive || state !== 'aim' || digging) { adimX = null; return; }
+  adimSon += dt;
+  if (adimX !== null && Math.abs(a.x - adimX) > 0.2 && Math.abs(a.y - adimY) < 3) adimSon = 0;   // asker her karede ilerlemeyebilir
+  if (adimSon < 0.15) { adimT -= dt; if (adimT <= 0) { adimT = 0.27; Sound.play('adim'); } } else adimT = 0.04;
+  adimX = a.x; adimY = a.y;
+}
 function inGameState() { return state !== 'menu' && state !== 'over'; }
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
@@ -3599,7 +3610,7 @@ function frame(now) {
     // Host saniyede ~30 kez oyunun durumunu herkese yollar
     if (mode === 'host' && inGame && state !== 'menu' && now - lastSnapSent >= 33) { lastSnapSent = now; broadcast(snapshot()); }
   }
-  updateFx(dt);
+  updateFx(dt); adimSesi(dt);
   if (aktifHarita === 'hurda' && inGameState()) kabloZamani();
   if (terr) updateCam();
   render(now / 1000);
