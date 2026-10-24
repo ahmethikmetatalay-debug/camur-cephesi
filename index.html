@@ -576,7 +576,8 @@ const Sound = (() => {
   // parca: tek dosyada birden çok ses varsa [başla, bitir] aralıkları (her çalışta biri rastgele seçilir), tembel: istenince iner
   const SAMPLES = {
     helegoz: { u: 'hele-iki-gozum.mp3', v: 1 },
-    acik: { u: 'acik.mp3', v: 1.1, parca: [[0.1, 0.36], [0.86, 1.24], [1.36, 1.62], [2.1, 2.36], [2.58, 2.82], [3.28, 3.58], [4.06, 4.36], [4.78, 5.12], [5.6, 5.82], [6.14, 6.48], [6.88, 7.32]] },
+    // 11 ayrı ah/uh; üçüncü sayı parçanın ses eşitlemesi (en kısığı en yükseğinin %39'u kadardı)
+    acik: { u: 'acik.mp3', v: 1.1, parca: [[0.09, 0.37, 1.51], [0.87, 1.25, 1.27], [1.37, 1.62, 1], [2.1, 2.33, 1.07], [2.6, 2.82, 1.67], [3.29, 3.56, 1.16], [4.06, 4.35, 1.25], [4.79, 5.1, 1.03], [5.6, 5.79, 0.65], [6.15, 6.49, 0.94], [6.88, 7.32, 0.81]] },
     altin: { u: 'altin-sandik-al.mp3', v: 2.4 },
     bazukaAtes: { u: 'bazuka-roket-ateslendi-2.mp3', o: 0.1, v: 0.55 },
     roketUcus: { u: 'bazuka-roket-ateslendi.mp3', o: 0.21, v: 1.7 },
@@ -590,20 +591,23 @@ const Sound = (() => {
     kalkan: { u: 'kalkan.mp3', o: 0.07, v: 1.7 },
     kementAt: { u: 'kement-at.mp3', o: 0.07, v: 1.6 },
     kirbac: { u: 'kirbac.mp3', o: 0.1, v: 1.8 },
-    kurek: { u: 'kurek-kazma.mp3', o: 0.13, v: 0.8 },
     ordek: { u: 'ordek.mp3', o: 0.23, v: 1.2 },
     portalAtes: { u: 'portal-tabancasi-atesleme.mp3', o: 0.49, v: 2.4 },
     portalGec: { u: 'portaldan-gecme.mp3', o: 0.21, v: 2.2 },
-    sandik: { u: 'sandik-al.mp3', o: 0.21, v: 1.8 },
-    seke: { u: 'seke.mp3', o: 0.23, v: 3 },
     sira: { u: 'sira-sende.mp3', o: 0.17, v: 1.9 },
     su: { u: 'su.mp3', o: 0.23, v: 1.7 },
     zipla: { u: 'ziplama.mp3', o: 0.25, v: 1.5 },
-    muzik: { u: 'muzik-lobi.mp3', v: 0.9 },
+    muzik: { u: 'muzik-lobi.mp3', v: 0.45 },
     ortamHurda: { u: 'harita-ortam-hurda.mp3', v: 0.45, tembel: true },
     kablo: { u: 'harita-ortam-hurda-kablo-cizirtisi.mp3', v: 1.4, tembel: true, parca: [[0.1, 0.58], [1.42, 2.06], [2.9, 4.04]] },
   };
-  const sampleRaw = {}, sampleBuf = {}, istendi = {};
+  const sampleRaw = {}, sampleBuf = {}, istendi = {}, torbalar = {};
+  // Parçalı seslerde torba: hepsi bir kez çalınmadan aynısı tekrar gelmez
+  function torba(k, n) {
+    let b = torbalar[k];
+    if (!b || !b.length) { const son = b && b.son; b = torbalar[k] = [...Array(n).keys()].sort(() => Math.random() - 0.5); if (n > 1 && b[b.length - 1] === son) b.unshift(b.pop()); }
+    const i = b.pop(); b.son = i; return i;
+  }
   function yukle(k) {
     if (istendi[k] || !SAMPLES[k]) return; istendi[k] = true;
     fetch('assets/sounds/' + SAMPLES[k].u).then(r => r.ok ? r.arrayBuffer() : null).then(b => { if (b) { sampleRaw[k] = b; if (ac) decodeSample(k); } }).catch(() => {});
@@ -632,7 +636,7 @@ const Sound = (() => {
     const s = ac.createBufferSource(), g = ac.createGain(), t = ac.currentTime + (opt.delay || 0);
     g.gain.value = (opt.vol ?? 1) * (S.v ?? 1);
     s.buffer = sampleBuf[k]; s.connect(g).connect(sfx);
-    if (S.parca) { const p = S.parca[opt.parca ?? Math.floor(Math.random() * S.parca.length)] || S.parca[0]; s.start(t, p[0], p[1] - p[0]); }
+    if (S.parca) { const p = S.parca[opt.parca ?? torba(k, S.parca.length)] || S.parca[0]; g.gain.value *= p[2] ?? 1; s.start(t, p[0], p[1] - p[0]); }
     else s.start(t, Math.max(0, opt.o ?? S.o ?? 0));
     return { stop(f = 0.12) { try { const n = ac.currentTime; g.gain.cancelScheduledValues(n); g.gain.setValueAtTime(g.gain.value, n); g.gain.linearRampToValueAtTime(0, n + f); s.stop(n + f + 0.02); } catch (e) {} } };
   }
@@ -713,6 +717,16 @@ const Sound = (() => {
       case 'traitor': osc('sawtooth', 220, 110, t, 0.5, 0.12); osc('sawtooth', 233, 116, t, 0.5, 0.1); break;
       case 'punch': osc('sine', 170, 55, t, 0.16, 0.7); nz(t, 0.09, 0.35, 'lowpass', 1400, 300); break;
       case 'shield': osc('sine', 880, 1500, t, 0.28, 0.14); osc('triangle', 1320, 2200, t + 0.03, 0.22, 0.06); break;
+      case 'kaz': {   // kürek toprağa girer: kumlu hışırtı + boğuk tok
+        const f = 0.85 + Math.random() * 0.3;
+        nz(t, 0.11, 0.32, 'bandpass', 1300 * f, 380 * f); nz(t + 0.02, 0.07, 0.18, 'highpass', 3200 * f, 0);
+        osc('triangle', 150 * f, 70 * f, t, 0.07, 0.22); break;
+      }
+      case 'sandik': {   // tahta kapak açılır (tok tak) + yükselen parıltı
+        nz(t, 0.05, 0.35, 'lowpass', 1600, 300); osc('triangle', 210, 140, t, 0.08, 0.35);
+        [72, 76, 79, 84, 88].forEach((m, i) => { osc('triangle', hz(m), 0, t + 0.07 + i * 0.055, 0.16, 0.12); osc('sine', hz(m + 12), 0, t + 0.07 + i * 0.055, 0.1, 0.04); });
+        nz(t + 0.3, 0.25, 0.05, 'highpass', 7000, 0); break;
+      }
       case 'whip': nz(t, 0.05, 0.55, 'highpass', 3200, 0); osc('square', 2200, 500, t, 0.045, 0.09); nz(t + 0.03, 0.08, 0.2, 'bandpass', 1800, 900); break;
     }
   }
@@ -1211,7 +1225,7 @@ function hurt(u, dmg, linked) {
   credit(u, Math.min(dmg, u.hp));
   u.hp = Math.max(0, u.hp - dmg);
   addPop(u.x, u.y - 52, '-' + dmg, u.team.c);
-  if (!acikSus && performance.now() - acikT > 250) { acikT = performance.now(); sfx('acik'); }   // acik.mp3'teki ah/uh'lardan biri
+  if (!acikSus && performance.now() - acikT > 250) { acikT = performance.now(); sfx('acik', { delay: 0.1 }); }   // acik.mp3'teki ah/uh'lardan biri, patlamanın hemen ardından
   // Link: aynı oyuncunun bağlı askerleri de aynı hasarı alır, bağ ilk hasarda kopar
   if (u.link && !linked) {
     const group = u.team.units.filter(o => o.link && o.alive && o !== u);
@@ -1348,7 +1362,7 @@ function collect(c, u) {
     if (mates.length > 1) { for (const o of mates) o.link = true; addPop(u.x, y, 'LİNK!', '#6fe36b'); Sound.play('traitor'); }
     else addPop(u.x, y, 'Link (etkisiz)', '#6fe36b');
   }
-  Sound.sample('sandik') || Sound.play('pickup'); emit({ t: 'pk' });
+  Sound.play('sandik'); emit({ t: 'pk' });
 }
 
 // ---- Silahlar ----
@@ -1556,7 +1570,7 @@ function explodeFx(x, y, r, ses) {
   for (let i = 0; i < 18; i++) { const a = -Math.PI * Math.random(), s = 150 + Math.random() * 280; parts.push({ kind: 'dirt', x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, g: G, size: 2 + Math.random() * 3, life: 1.2, max: 1.2 }); }
 }
 
-function bounceFx() { shake = Math.min(12, shake + 1.6); Sound.sample('seke') || Sound.play('bounce'); buzz(15); }
+function bounceFx() { shake = Math.min(12, shake + 1.6); Sound.play('bounce'); buzz(15); }
 function bounce() { bounceFx(); emit({ t: 'bo' }); }
 
 function portalFx(x, y, i) {
@@ -1751,9 +1765,10 @@ function atesSesi(w) {
 function jetSesi() { Sound.sample('helegoz'); Sound.sample('f16', { delay: Math.max(0, JET_LEAD - 1.5) }) || Sound.jet(JET_LEAD); buzz(60); }
 function punchSesi(hit) {
   if (!hit) { Sound.play('fire'); return; }
-  if (Sound.sample('yumruk')) Sound.sample('yumrukYiyen', { delay: 0.04 }); else Sound.play('punch');
+  if (!Sound.sample('yumruk')) { Sound.play('punch'); return; }
+  if (Math.random() < 0.25) Sound.sample('yumrukYiyen', { delay: 0.04 }); else Sound.sample('acik', { delay: 0.05 });
 }
-function kurekSesi() { const n = performance.now(); if (n - kurekT > 280) { kurekT = n; Sound.sample('kurek'); } }
+function kurekSesi() { const n = performance.now(); if (n - kurekT > 230) { kurekT = n; Sound.play('kaz'); } }
 // Hurda Gezegeni'nde arada bir kablo cızırtısı (her telefonda kendi zamanında)
 function kabloZamani() {
   const n = performance.now() / 1000;
@@ -1951,7 +1966,7 @@ function onClientData(m) {
     case 'bo': if (inGame) bounceFx(); break;
     case 'fi': if (inGame) atesSesi(String(m.w)); break;
     case 'sf': if (inGame && Sound.has(String(m.n))) Sound.sample(String(m.n), { o: m.o == null ? undefined : +m.o, delay: +m.d || 0, vol: m.v == null ? 1 : +m.v }); break;
-    case 'pk': if (inGame) Sound.sample('sandik') || Sound.play('pickup'); break;
+    case 'pk': if (inGame) Sound.play('sandik'); break;
     case 'as': if (inGame) jetSesi(); break;
     case 'wh': if (inGame) { Sound.sample(m.n === 'kementAt' ? 'kementAt' : 'kirbac') || Sound.play('whip'); buzz(25); } break;
     case 'sh': if (inGame) { bubbles.push({ i: m.i | 0, t: 0 }); Sound.sample('kalkan') || Sound.play('shield'); buzz(40); } break;
@@ -3045,7 +3060,8 @@ function jump() {
   active.vy = -330; active.vx = active.facing * 130; active.grounded = false;
   sfx('zipla');
 }
-function toggleMap() { overview = !overview; cam.free = false; $('bMap').classList.toggle('on', overview); }
+// Harita ikonu: uzaklaştırır; harita görünümünde ya da kamera elle kaydırılmışken basılırsa sıradaki askere döner
+function toggleMap() { overview = !(overview || cam.free); cam.free = false; $('bMap').classList.toggle('on', overview); }
 // Kürek turda bir kez kullanılır: kazmaya başladıktan sonra tekrar seçilemez
 function weaponLocked(t, i) { return t.ammo[i] === 0 || (WEAPONS[i].id === 'shovel' && digging); }
 function selectWeapon(i) {
@@ -3177,7 +3193,7 @@ cv.addEventListener('pointermove', e => {
     pinch.mx = pi.mx; pinch.my = pi.my;
   } else if (aiming) aimAt(e);
   else if (pan) {
-    cam.free = true; overview = false; $('bMap').classList.remove('on');
+    cam.free = true;   // harita görünümündeyken kaydırmak görünümü kapatmaz; ikona basınca karaktere dönülür
     cam.x -= (e.clientX - pan.x) / cam.z; cam.y -= (e.clientY - pan.y) / cam.z;
     pan = { x: e.clientX, y: e.clientY };
   }
