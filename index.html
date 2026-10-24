@@ -709,6 +709,8 @@ const Sound = (() => {
       case 'boom': { const s = clamp(k / 60, 0.3, 1); nz(t, 0.45 + 0.7 * s, 0.9 * s, 'lowpass', 2400, 90); osc('sine', 130, 32, t, 0.5, 0.9 * s); break; }
       case 'fire': nz(t, 0.3, 0.22, 'bandpass', 500, 2600); break;
       case 'bounce': osc('triangle', 280, 110, t, 0.1, 0.75); osc('sine', 150, 70, t, 0.09, 0.6); nz(t, 0.05, 0.35, 'bandpass', 2200, 900); break;   // teneke kutu yere çarpar
+      case 'geriSay': { const y = k === 1; osc('square', y ? 1320 : 990, 0, t, y ? 0.16 : 0.07, y ? 0.09 : 0.07); osc('sine', y ? 2640 : 1980, 0, t, 0.04, 0.04); break; }   // saat tiki
+      case 'sureBitti': osc('sawtooth', 440, 330, t, 0.35, 0.1); osc('square', 220, 165, t, 0.38, 0.07); break;
       case 'adim': { const f = 0.85 + Math.random() * 0.3; nz(t, 0.07, 0.16, 'lowpass', 900 * f, 220 * f); osc('sine', 95 * f, 55 * f, t, 0.06, 0.13); break; }   // çamurda ayak
       case 'splash': nz(t, 0.55, 0.3, 'bandpass', 1800, 500); break;
       case 'pickup': osc('square', hz(76), 0, t, 0.09, 0.07); osc('square', hz(81), 0, t + 0.08, 0.09, 0.07); osc('square', hz(88), 0, t + 0.16, 0.2, 0.07); break;
@@ -3011,6 +3013,13 @@ function updateHud() {
   const tm = $('timer');
   tm.textContent = state === 'aim' ? Math.ceil(timer) : '…';
   tm.classList.toggle('warn', state === 'aim' && timer < 10);
+  // Son 5 saniye: her saniye tik, son saniyede daha tiz; süre biterse kısa bir düdük
+  const sn = state === 'aim' ? Math.ceil(timer) : -1;
+  if (sn !== sayacSon) {
+    if (sn >= 1 && sn <= 5 && sayacSon > sn) Sound.play('geriSay', sn);
+    else if (sayacSon === 1 && timer <= 0.05) Sound.play('sureBitti');
+    sayacSon = sn;
+  }
   const wf = $('windFill');
   wf.style.left = (wind < 0 ? 50 + wind * 50 : 50) + '%';
   wf.style.width = Math.abs(wind) * 50 + '%';
@@ -3590,6 +3599,7 @@ if (new URLSearchParams(location.search).has('test')) window.__t = {
 // ---- Döngü ----
 let last = performance.now(), acc = 0;
 // Yürüme sesi: sıradaki asker yerde sağa sola ilerledikçe adım; host ve misafir kendi ekranında konumdan çıkarır
+let sayacSon = -1;
 let adimX = null, adimY = 0, adimT = 0, adimSon = 0;
 function adimSesi(dt) {
   const a = active;
