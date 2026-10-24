@@ -512,7 +512,7 @@ for (const ev of ['resize', 'orientationchange', 'pageshow', 'focus']) addEventL
 if (window.visualViewport) visualViewport.addEventListener('resize', fitApp);
 document.addEventListener('fullscreenchange', () => setTimeout(fitApp, 200));
 setInterval(fitApp, 1000);   // bazı telefonlarda dönüş olayı geç ya da hiç gelmiyor
-const ID_PREFIX = 'gasmerler-v13-';
+const ID_PREFIX = 'gasmerler-v14-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 // Tohumlu rastgelelik: arazi tohumdan üretilir, böylece her telefon aynı haritayı kendisi çizer
@@ -758,7 +758,7 @@ function buzz(ms) {
 // ---- Harita teması: Plastik Evrim Gezegeni ----
 // Arazi şekli her maç aynı tohumla rastgele üretilir; tema sadece görünümü belirler.
 const HARITALAR = ['plastik', 'hurda'];   // 'plastik': kodla üretilen rastgele harita, 'hurda': Photoshop katmanlı sabit harita
-let aktifHarita = 'plastik', haritaDuvar = false, mterr = null, mtctx = null;   // mterr: Hurda'nın mağara duvarı tuvali
+let aktifHarita = 'plastik', haritaDuvar = false, haritaAyna = false;   // haritaAyna: Hurda Gezegeni yatayda ters (tohuma göre rastgele)
 const TEMA = {
   ad: 'Plastik Evrim Gezegeni',
   gok: ['#1e2433', '#4a3f5c', '#c9a25e'],          // gökyüzü: üst, orta, ufuk
@@ -778,12 +778,12 @@ const TEMA_PLASTIK = { ...TEMA };
 function isSolid(x, y) { x |= 0; y |= 0; if (x < 0 || x >= W || y < 0 || y >= H) return false; return solid[y * W + x] === 1; }
 
 function genTerrain() {
-  Object.assign(TEMA, TEMA_PLASTIK); haritaDuvar = false; mterr = mtctx = null;
+  Object.assign(TEMA, TEMA_PLASTIK); haritaDuvar = false;
   if (aktifHarita === 'hurda') {
     solid = new Uint8Array(W * H);
-    HARITA_HURDA_PNG.uret(solid);                       // gömülü maske: her telefonda aynı
-    ({ terr, tctx } = HARITA_HURDA_PNG.arazi());       // tuvale dünya koordinatlarıyla çizilir
-    haritaDuvar = true; ({ mterr, mtctx } = HARITA_HURDA_PNG.magara());
+    HARITA_HURDA_PNG.uret(solid, haritaAyna);                       // gömülü maske: her telefonda aynı
+    ({ terr, tctx } = HARITA_HURDA_PNG.arazi(haritaAyna));       // tuvale dünya koordinatlarıyla çizilir
+    haritaDuvar = true;
     Object.assign(TEMA, HARITA_HURDA_PNG.tema);
     return;
   }
@@ -875,10 +875,6 @@ function carve(cx, cy, r) {
   tctx.globalCompositeOperation = 'destination-out';
   tctx.beginPath(); tctx.arc(cx, cy, r, 0, Math.PI * 2); tctx.fill();
   tctx.restore();
-  if (mtctx) {   // mağara duvarı da arazinin oyulduğu yerden aşınır
-    mtctx.save(); mtctx.globalCompositeOperation = 'destination-out';
-    mtctx.beginPath(); mtctx.arc(cx, cy, r, 0, Math.PI * 2); mtctx.fill(); mtctx.restore();
-  }
 }
 
 function surfaceY(x) { for (let y = 0; y < H; y++) if (isSolid(x, y)) return y - 1; return null; }
@@ -1056,6 +1052,7 @@ function haritaIleBaslat(opts, sonra) {
 function startGame(opts) {
   rng = mulberry32(opts.seed >>> 0);
   aktifHarita = opts.harita === 'hurda' ? 'hurda' : 'plastik';
+  haritaAyna = aktifHarita === 'hurda' && ((Math.imul(opts.seed >>> 0, 2654435761) >>> 16) & 1) === 1;
   W = aktifHarita === 'hurda' ? HARITA_HURDA_PNG.W : opts.teams.length > 4 ? 1900 : 1500;   // Hurda Gezegeni hep 1900; Plastik Evrim 5-6 oyuncuda genişler
   genTerrain();
   mapTop = 0; while (mapTop < WATER - 100 && !solid.subarray(mapTop * W, mapTop * W + W).includes(1)) mapTop++;
@@ -1063,6 +1060,7 @@ function startGame(opts) {
   teams = []; units = []; projs = []; parts = []; pops = []; graves = []; crates = []; portals = []; bubbles = []; carveLog = []; pid = 0;
   active = null; winnerIdx = -1; portalPending = 0; portalReturn = false; ffTurn = 0; moveLeft = MOVE_MAX;
   airTarget = null; shotThisTurn = false; camHold = null;
+  elektrikKur();
   for (const g of buryGoldCrates()) crates.push({ id: ++pid, x: g.x, y: g.y, vy: 0, para: false, k: 1 });
   gameMode = opts.mode === 'team' ? 'team' : 'ffa'; sidePtr = [-1, -1, -1];
   const size = clamp(opts.size | 0, 2, 4), list = opts.teams.slice(0, MAX_PLAYERS), cols = colorsFor(list, gameMode === 'team');
@@ -1075,6 +1073,7 @@ function startGame(opts) {
     // Hurda Gezegeni'nde mağara tabanlarında da başlanabilir: o sütundaki zeminlerden biri rastgele seçilir
     const x = 80 + rng() * (W - 160), fl = aktifHarita === 'hurda' ? floorsAt(x) : [surfaceY(x)], y = fl[Math.floor(rng() * fl.length)] ?? null;
     if (y === null || y > WATER - 40 || xs.some(o => Math.hypot(o.x - x, o.y - y) < 70) || crates.some(c => Math.hypot(c.x - x, c.y - y) < 60)) continue;
+    if (aktifHarita === 'hurda' && altinRafi(x, y)) continue;
     xs.push({ x, y });
   }
   for (let k = 0; k < total; k++) {
@@ -1257,9 +1256,92 @@ function kill(u) {
 // ---- Sandıklar ----
 // Gömülü altın sandık: toprağın derinlerinde, etrafı tamamen toprakla çevrili iki oyuk açılır.
 // Haritanın tohumundan üretilir, böylece her telefonda aynı yerdedir. İçindeki sandık "Hele İki Gözüm" verir.
+// ---- Hurda Gezegeni: topraktan çıkan elektrik ----
+// Haritada az sayıda sabit noktada kablo kaçağı var. Yalnızca sırası gelen asker o noktanın üstünden YÜRÜRKEN,
+// noktaya girdiği anda ELEKTRIK_SANS ihtimalle çarpar (5 hasar, ufak sıçrama); sonra nokta ELEKTRIK_BEKLE sn dinlenir.
+// Duran, sırası olmayan ya da havadan geçen asker çarpılmaz. Kararı host verir, görüntü/ses herkese gider.
+const ELEKTRIK_YER = [[650, 295], [1250, 440], [950, 628], [1400, 695]];   // elle seçildi (ayna öncesi)
+const ELEKTRIK_DMG = 5, ELEKTRIK_SANS = 0.45, ELEKTRIK_BEKLE = 9;
+let elektrik = [], zaplar = [];
+function elektrikKur() {
+  elektrik = []; zaplar = [];
+  if (aktifHarita !== 'hurda') return;
+  for (const [x0, y0] of ELEKTRIK_YER) {
+    const x = hx(x0), fl = floorsAt(x);
+    if (!fl.length) continue;
+    const y = fl.reduce((b, v) => Math.abs(v - y0) < Math.abs(b - y0) ? v : b);
+    elektrik.push({ x, y, cd: 0, ic: false });
+  }
+}
+function elektrikKontrol() {
+  for (const e of elektrik) {
+    const ic = Math.abs(active.x - e.x) < 15 && Math.abs(active.y - e.y) < 16;
+    if (ic && !e.ic && e.cd <= 0 && Math.random() < ELEKTRIK_SANS) {
+      e.cd = ELEKTRIK_BEKLE;
+      const u = active, i = units.indexOf(u);
+      elektrikFx(e.x, e.y, i); emit({ t: 'el', x: r1(e.x), y: r1(e.y), i });
+      if (!hurt(u, ELEKTRIK_DMG)) { u.vy = -170; u.vx = -u.facing * 70; u.grounded = false; }
+    }
+    e.ic = ic;
+  }
+}
+function elektrikFx(x, y, i) {
+  zaplar.push({ x, y, i, son: performance.now() + 320 });
+  Sound.sample('kablo', { vol: 1.4 }) || Sound.play('traitor'); buzz(70);
+  shake = Math.min(12, shake + 3);
+  for (let k = 0; k < 16; k++) { const a = -Math.PI * Math.random(), v = 60 + Math.random() * 160; parts.push({ kind: 'spark', c: k % 3 ? '#9fe8ff' : '#ffffff', x, y: y - 2, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 0, size: 1.5 + Math.random() * 2, life: 0.45, max: 0.45 }); }
+}
+// Zikzak şimşek çizgisi
+function simsek(x0, y0, x1, y1, sap) {
+  ctx.beginPath(); ctx.moveTo(x0, y0);
+  const n = 7;
+  for (let k = 1; k < n; k++) { const f = k / n; ctx.lineTo(x0 + (x1 - x0) * f + (Math.random() - 0.5) * sap, y0 + (y1 - y0) * f + (Math.random() - 0.5) * sap * 0.4); }
+  ctx.lineTo(x1, y1); ctx.stroke();
+}
+function drawElektrik(t) {
+  if (!elektrik.length) return;
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const e of elektrik) {
+    if (!isSolid(e.x, e.y + 2)) continue;   // nokta patlamayla yok olduysa çizme
+    // Yerde hafif mavi sızıntı: oyuncu noktayı öğrenebilsin
+    const nab = 0.5 + 0.5 * Math.sin(t * 3 + e.x);
+    ctx.fillStyle = `rgba(120,220,255,${0.22 + nab * 0.2})`;
+    ctx.beginPath(); ctx.ellipse(e.x, e.y + 1, 13, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    // Arada bir kısa kıvılcım
+    if (Math.sin(t * 11 + e.x * 0.37) * Math.sin(t * 6.7 + e.y) > 0.82) {
+      ctx.shadowColor = '#7fe0ff'; ctx.shadowBlur = 6; ctx.strokeStyle = 'rgba(220,250,255,.95)'; ctx.lineWidth = 1.2;
+      for (let k = 0; k < 2; k++) { const dx = (Math.random() - 0.5) * 14; simsek(e.x + dx * 0.3, e.y, e.x + dx, e.y - 7 - Math.random() * 7, 4); }
+      ctx.shadowBlur = 0;
+    }
+  }
+  ctx.restore();
+}
+// Çarpılma anı: askerlerin ÖNÜNE çizilir; yerden çıkan 4 kol askerin gövdesini sarar
+function drawZaplar() {
+  const now = performance.now();
+  zaplar = zaplar.filter(z => z.son > now);
+  if (!zaplar.length) return;
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const z of zaplar) {
+    const u = units[z.i]; if (!u) continue;
+    const boy = UNIT_H * 1.9, cx = u.x, cy = u.y - boy / 2;
+    ctx.fillStyle = `rgba(170,235,255,${0.25 + Math.random() * 0.2})`; ctx.beginPath(); ctx.ellipse(cx, cy, 22, boy * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowColor = '#5fd4ff'; ctx.shadowBlur = 14;
+    for (let k = 0; k < 4; k++) {
+      const x0 = z.x + (Math.random() - 0.5) * 26, x1 = cx + (Math.random() - 0.5) * 24, y1 = u.y - boy * (0.45 + Math.random() * 0.55);
+      ctx.strokeStyle = 'rgba(110,215,255,.8)'; ctx.lineWidth = 4.5; simsek(x0, z.y, x1, y1, 16);
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.8; simsek(x0, z.y, x1, y1, 12);
+    }
+  }
+  ctx.restore();
+}
+// Hurda Gezegeni'nin elle çizilmiş koordinatı → dünya (ayna haritada x ters döner)
+function hx(x) { return haritaAyna ? W - x : x; }
+// Altın sandığın rafı: kolonla kapalı kuytu; maç başında orada kimse başlamaz
+function altinRafi(x, y) { const gx = haritaAyna ? W - x : x; return gx > 330 && gx < 535 && y > 440 && y < 545; }
 function buryGoldCrates() {
   // Hurda Gezegeni: altın sandık büyük kemerin altındaki, sarkıtların arasındaki kuytu rafta durur (haritanın en zor yeri)
-  if (aktifHarita === 'hurda') { let y = 470; while (y < WATER && !isSolid(462, y + 1)) y++; return [{ x: 462, y }]; }
+  if (aktifHarita === 'hurda') { const x = hx(462); let y = 470; while (y < WATER && !isSolid(x, y + 1)) y++; return [{ x, y }]; }
   const out = [], RX = 30, RY = 24;
   const enclosed = (x, y, min) => {   // oyuğun çevresindeki halkanın neredeyse tamamı toprak olmalı (mağaraya denk gelmesin)
     let n = 0;
@@ -1683,6 +1765,7 @@ function stepGoat(g) {
 
 // ---- Ana simülasyon adımı (sabit 60 Hz, sadece local ve host'ta) ----
 function step() {
+  for (const e of elektrik) if (e.cd > 0) e.cd -= DT;
   if (state === 'menu' || state === 'over' || state === 'wait') return;
   if (state === 'aim') {
     timer -= DT;
@@ -1702,6 +1785,7 @@ function step() {
             if (!walkStep(active, dir) || !active.grounded) { walkAcc = 0; break; }
             moveLeft--;
           }
+          if (elektrik.length) elektrikKontrol();
         }
       }
       if (input.charging) { input.power = Math.min(1, input.power + DT / 1.3); if (input.power >= 1) fire(1); }
@@ -1978,6 +2062,7 @@ function onClientData(m) {
     case 'wh': if (inGame) { Sound.sample(m.n === 'kementAt' ? 'kementAt' : 'kirbac') || Sound.play('whip'); buzz(25); } break;
     case 'sh': if (inGame) { bubbles.push({ i: m.i | 0, t: 0 }); Sound.sample('kalkan') || Sound.play('shield'); buzz(40); } break;
     case 'pu': if (inGame && units[m.i | 0]) { units[m.i | 0].punchT = 0.3; punchSesi(m.h); if (m.h) { shake = Math.min(12, shake + 4); buzz(35); } } break;
+    case 'el': if (inGame) elektrikFx(+m.x, +m.y, m.i | 0); break;
     case 'dg': if (inGame && terr) { carve(+m.x, +m.y, clamp(+m.r, 4, 30)); kurekSesi(); } break;
     case 'pt': if (inGame) { const i = m.i ? 1 : 0; Sound.sample('portalGec') || Sound.play('portal'); for (let k = 0; k < 14; k++) { const a = Math.random() * 6.28, s = 30 + Math.random() * 90; parts.push({ kind: 'spark', c: PORTAL_COLORS[i], x: +m.x, y: +m.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, g: 0, size: 2 + Math.random() * 2, life: 0.5, max: 0.5 }); } } break;
     case 'pop': if (inGame) pops.push({ x: +m.x, y: +m.y, t: 0, text: String(m.text).slice(0, 24), c: String(m.c) }); break;
@@ -2863,8 +2948,8 @@ function render(t) {
   const sxo = (Math.random() - 0.5) * shake, syo = (Math.random() - 0.5) * shake;
   const z = cam.z;
   ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * (vw / 2 - cam.x * z + sxo), dpr * (vh / 2 - cam.y * z + syo));
-  if (mterr) ctx.drawImage(mterr, 0, 0, W, H);
   ctx.drawImage(terr, 0, 0, W, H);
+  drawElektrik(t);
   for (const P of portals) drawPortal(P, t);
   drawAirTarget(t);
   for (const g of graves) {
@@ -2877,6 +2962,7 @@ function render(t) {
   for (const c of crates) drawCrate(c, t);
   for (const u of units) if (u.alive && u !== active) drawUnit(u, false, t);
   if (active && active.alive) drawUnit(active, true, t);
+  drawZaplar();
   for (const p of projs) drawProjectile(p, t);
   // Kalkan hasarı yuttuğu an beliren mavi küre
   for (const b of bubbles) {
@@ -3590,9 +3676,9 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.se
 // Otomatik testler için iç duruma erişim; sadece adres ?test ile açılınca
 if (new URLSearchParams(location.search).has('test')) window.__t = {
   get state() { return state; }, get teams() { return teams; }, get units() { return units; }, get active() { return active; },
-  get portals() { return portals; }, set portals(v) { portals = v; }, get crates() { return crates; }, get projs() { return projs; }, get moveLeft() { return moveLeft; },
+  get portals() { return portals; }, set portals(v) { portals = v; }, get crates() { return crates; }, get projs() { return projs; }, get moveLeft() { return moveLeft; }, set moveLeft(v) { moveLeft = v; },
   get cam() { return cam; }, get mode() { return mode; }, get digLeft() { return digLeft; }, get bubbles() { return bubbles; }, explode, get W() { return W; }, WI, collect,
-  Sound, get airTarget() { return airTarget; }, set airTarget(v) { airTarget = v; }, get settleAll() { return settleAll; }, get camHold() { return camHold; }, isSolid, groundConnected, get aktifHarita() { return aktifHarita; }, get solidHash() { let h = 0; for (let i = 0; i < solid.length; i += 7) h = (h * 31 + solid[i]) | 0; return h; },
+  Sound, get airTarget() { return airTarget; }, set airTarget(v) { airTarget = v; }, get settleAll() { return settleAll; }, get camHold() { return camHold; }, isSolid, groundConnected, get aktifHarita() { return aktifHarita; }, get haritaAyna() { return haritaAyna; }, get elektrik() { return elektrik; }, floorsAt, altinRafi, elektrikFx, get solidHash() { let h = 0; for (let i = 0; i < solid.length; i += 7) h = (h * 31 + solid[i]) | 0; return h; },
   spawnCrate, surfaceY, setTimer(v) { timer = v; },
 };
 
